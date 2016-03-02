@@ -1,10 +1,10 @@
 import logging
 import struct
 import pymacho
+from pymacho.MachO import MachO
 
-from enums import *
-
-from base_executable import BaseExecutable
+from base_executable import *
+from section import *
 
 class MachOExecutable(BaseExecutable):
     def __init__(self, file_path):
@@ -16,6 +16,8 @@ class MachOExecutable(BaseExecutable):
 
         if self.architecture is None:
             raise Exception('Architecture is not recognized')
+
+        self.executable_segment = [s for s in self.helper.segments if s.initprot & 0x4]
     
     def _identify_arch(self):
         machine = self.helper.header.display_cputype()
@@ -25,27 +27,17 @@ class MachOExecutable(BaseExecutable):
             return ARCHITECTURE.X86_64
         else:
             return None
-
-    def _get_text_segment(self):
-        return [x for x in self.helper.segments if x.segname == '__TEXT'][0]
-
-    def _get_text_section(self):
-        return [section for section in self._get_text_segment().sections if section.sectname == '__text'][0]
     
-    def text_vaddr(self):
-        return self._get_text_section().addr
+    def executable_segment_vaddr(self):
+        return self.executable_segment.vmaddr
 
-    def text_size(self):
-        return self._get_text_section().size
-    
-    def text_section(self):
-        return self._get_text_section().data
+    def executable_segment_size(self):
+        return self.executable_segment.vmszie
 
-    def vaddr_binary_offset(self, vaddr):
+    def iter_sections(self):
         for segment in self.helper.segments:
             for section in segment.sections:
-                if section.addr <= vaddr <= section.addr+section.size:
-                    return section.offset + (vaddr - section.addr)
+                yield section_from_macho_section(section, segment)
 
     def _extract_symbol_table(self):
         ordered_symbols = []

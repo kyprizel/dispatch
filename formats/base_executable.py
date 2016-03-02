@@ -45,17 +45,10 @@ class BaseExecutable(object):
         '''
         return self.architecture in (ARCHITECTURE.X86_64, ARCHITECTURE.ARM_64) # TODO: MIPS
 
-    def executable_segment_vaddr(self):
+    def iter_sections(self):
         '''
-        Gets the virtual address that the main executable segment starts at.
-        :return: The starting virtual address of the executable segment.
-        '''
-        raise NotImplementedError()
-
-    def executable_segment_size(self):
-        '''
-        Gets the size of the main executable segment.
-        :return: The size of the executable segment.
+        Iterates through each section in the executable.
+        :return: Iterator
         '''
         raise NotImplementedError()
 
@@ -65,10 +58,15 @@ class BaseExecutable(object):
         :param vaddr: Virtual address to check
         :return: True if the vaddr is in an executable segment, False otherwise
         '''
+        for section in self.iter_sections():
+            if section.executable and section.contains_vaddr(vaddr):
+                return True
+
+        return False
 
     def function_containing_vaddr(self, vaddr):
         for f in self.iter_functions():
-            if f.address <= vaddr < f.address + f.size:
+            if f.contains_address(vaddr):
                 return f
 
         return None
@@ -87,7 +85,11 @@ class BaseExecutable(object):
         :param vaddr: The virtual address to get the offset for.
         :return: The offset in the binary of the virtual address.
         '''
-        raise NotImplementedError()
+        for section in self.iter_sections():
+            if section.contains_vaddr(vaddr):
+                return section.offset + vaddr - section.vaddr
+
+        return None
 
     def _extract_symbol_table(self):
         '''
@@ -95,6 +97,7 @@ class BaseExecutable(object):
         Called from the analyzer in the main analysis function.
         :return: None
         '''
+        raise NotImplementedError()
 
     def get_binary(self):
         '''
@@ -141,8 +144,7 @@ class BaseExecutable(object):
         Iterates over the functions in this executable
         :return: Iterator
         '''
-        for func in self.functions.values():
-            yield func
+        return iter(self.functions.values())
 
     def function_named(self, name):
         '''
@@ -150,9 +152,10 @@ class BaseExecutable(object):
         :param name: The name of the function to search for.
         :return: The function if it is found, else None.
         '''
-        for func in self.functions.values():
-            if func.name == name or func.name == 'sym.'+name:
+        for func in self.iter_functions():
+            if func.name == name:
                 return func
+
         return None
 
     def replace_instruction(self, old_ins, new_asm):

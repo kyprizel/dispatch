@@ -33,15 +33,15 @@ class BaseAnalyzer(object):
         :return: None
         '''
         raise NotImplementedError()
-    
+
     def _gen_ins_map(self):
         '''
         Generates the instruction lookup dictionary
         :return: None
         '''
-        for section in self.executable.helper.iter_sections():
-            if section['sh_flags'] & 0x4:
-                for ins in self._disassembler.disasm(section.data(), section['sh_addr']):
+        for section in self.executable.iter_sections():
+            if section.executable:
+                for ins in self._disassembler.disasm(section.raw, section.vaddr):
                     self.ins_map[ins.address] = Instruction(ins)
     
     def _is_jump(self, instruction):
@@ -130,7 +130,7 @@ class BaseAnalyzer(object):
                         func.bbs.append(bb)
 
     def _prettify_operands(self):
-        for func in self.executable.functions.values():
+        for func in self.executable.iter_functions():
             for insn in func.instructions:
                 insn.prettify_operands(self)
     

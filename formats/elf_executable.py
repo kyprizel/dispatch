@@ -3,6 +3,7 @@ import logging
 import struct
 
 from base_executable import *
+from section import *
 
 
 INJECTION_SIZE = 0x1000
@@ -44,26 +45,16 @@ class ELFExecutable(BaseExecutable):
             return ARCHITECTURE.MIPS
         else:
             return None
-    
+
     def executable_segment_vaddr(self):
-        self.executable_segment['p_vaddr']
+        return self.executable_segment['p_vaddr']
 
     def executable_segment_size(self):
-        self.executable_segment['p_memsz']
+        return self.executable_segment['p_memsz']
 
-    def vaddr_is_executable(self, vaddr):
-        for section in self.helper.iter_sections():
-            if section['sh_flags'] & 0x4 and section['sh_addr'] <= vaddr < section['sh_addr'] + section['sh_size']:
-                return True
-
-        return False
-
-    def vaddr_binary_offset(self, vaddr):
-        for section in self.helper.iter_sections():
-            d = vaddr - section['sh_addr']
-            if 0 <= d <= section['sh_size']:
-                return section['sh_offset'] + d
-
+    def iter_sections(self):
+        for e_section in self.helper.iter_sections():
+            yield section_from_elf_section(e_section)
 
     def _extract_symbol_table(self):
         # Add in symbols from the PLT/rela.plt
