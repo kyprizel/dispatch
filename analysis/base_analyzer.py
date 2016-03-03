@@ -44,7 +44,7 @@ class BaseAnalyzer(object):
         for section in self.executable.sections_to_disassemble():
             for ins in self._disassembler.disasm(section.raw, section.vaddr):
                 if ins.id: # .byte "instructions" have an id of 0
-                    self.ins_map[ins.address] = Instruction(ins)
+                    self.ins_map[ins.address] = Instruction(ins, self.executable)
     
     def _is_jump(self, instruction):
         '''
@@ -130,11 +130,6 @@ class BaseAnalyzer(object):
                         bb.instructions = bb_instructions
 
                         func.bbs.append(bb)
-
-    def _prettify_operands(self):
-        for func in self.executable.iter_functions():
-            for insn in func.instructions:
-                insn.prettify_operands(self)
     
     def analyze(self):
         '''
@@ -149,8 +144,6 @@ class BaseAnalyzer(object):
         self._populate_func_instructions()
 
         self._identify_bbs()
-
-        self._prettify_operands()
 
     def cfg(self):
         '''

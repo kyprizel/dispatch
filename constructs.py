@@ -28,7 +28,7 @@ class Function(object):
 
     def print_disassembly(self):
         for i in self.instructions:
-            print str(i.address) + ' ' + i.mnemonic + ' ' + i.op_str
+            print hex(i.address) + ' ' + str(i)
 
 
 class BasicBlock(object):
@@ -44,10 +44,10 @@ class BasicBlock(object):
     
     def print_disassembly(self):
         for i in self.instructions:
-            print i.mnemonic + ' ' + i.op_str
+            print hex(i.address) + ' ' + str(i)
 
 class Instruction(object):
-    def __init__(self, capstone_inst):
+    def __init__(self, capstone_inst, executable):
         self.capstone_inst = capstone_inst
         self.address = int(self.capstone_inst.address)
         self.op_str = self.capstone_inst.op_str
@@ -56,25 +56,36 @@ class Instruction(object):
         self.groups = self.capstone_inst.groups
         self.bytes = self.capstone_inst.bytes
 
+        self._executable = executable
+
     def __repr__(self):
         return '<Instruction at {}>'.format(hex(self.address))
 
     def __str__(self):
-        return self.mnemonic + ' ' + self.op_str
+        return self.mnemonic + ' ' + self.nice_op_str()
 
-    def prettify_operands(self, analyzer):
+    def nice_op_str(self):
+        '''
+        Returns the operand string "nicely formatted." I.e. replaces addresses with function names (and function
+        relative offsets) if appropriate.
+        :return: The nicely formatted operand string
+        '''
+        s = self.op_str.split(', ')
+
+        # If this is an immediate call or jump, try to put a name to where we're calling/jumping to
         if CS_GRP_CALL in self.capstone_inst.groups or CS_GRP_JUMP in self.capstone_inst.groups:
+            # jump/call destination will always be the last operand (even with conditional ARM branch instructions)
             operand = self.capstone_inst.operands[-1]
-            if operand.imm in analyzer.executable.functions:
-                name = analyzer.executable.functions[operand.imm].name
-            elif analyzer.executable.vaddr_is_executable(operand.imm):
-                func_addrs = analyzer.executable.functions.keys()
+            if operand.imm in self._executable.functions:
+                s[-1] = self._executable.functions[operand.imm].name
+            elif self._executable.vaddr_is_executable(operand.imm):
+                func_addrs = self._executable.functions.keys()
                 func_addrs.sort(reverse=True)
                 for func_addr in func_addrs:
                     if func_addr < operand.imm:
                         break
                 diff = operand.imm - func_addr
-                name = analyzer.executable.functions[func_addr].name+'+'+hex(diff)
-            else:
-                name = self.op_str
-            self.op_str = name
+                s[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
+
+
+        return ', '.join(s)
