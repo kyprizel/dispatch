@@ -32,7 +32,15 @@ class PEExecutable(BaseExecutable):
             yield section_from_pe_section(pe_section, self.helper)
 
     def _extract_symbol_table(self):
-        raise NotImplementedError()
+        # Load in stuff from the IAT
+        for dll in self.helper.DIRECTORY_ENTRY_IMPORT:
+            for imp in dll.imports:
+                if imp.name:
+                    name = imp.name + '@' + dll.dll
+                else:
+                    name = 'ordinal_' + str(imp.ordinal) + '@' + dll.dll
+
+                self.functions[imp.address] = Function(imp.address, 8 if self.is_64_bit() else 4, name)
 
     def inject(self, asm, update_entry=False):
         raise NotImplementedError()

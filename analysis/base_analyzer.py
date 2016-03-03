@@ -20,6 +20,8 @@ class BaseAnalyzer(object):
         self.ins_map = OrderedDict()
 
         self._create_disassembler()
+        self._disassembler.detail = True
+        self._disassembler.skipdata = True
     
     def __repr__(self):
         return '<{} for {} {} \'{}\'>'.format(self.__class__.__name__,
@@ -39,9 +41,9 @@ class BaseAnalyzer(object):
         Generates the instruction lookup dictionary
         :return: None
         '''
-        for section in self.executable.iter_sections():
-            if section.executable:
-                for ins in self._disassembler.disasm(section.raw, section.vaddr):
+        for section in self.executable.sections_to_disassemble():
+            for ins in self._disassembler.disasm(section.raw, section.vaddr):
+                if ins.id: # .byte "instructions" have an id of 0
                     self.ins_map[ins.address] = Instruction(ins)
     
     def _is_jump(self, instruction):
@@ -137,7 +139,7 @@ class BaseAnalyzer(object):
     def analyze(self):
         '''
         Run the analysis subroutines.
-        Generates the instruction map and runs radare2 to get functions/BBs
+        Generates the instruction map, extracts symbol tables, identifies functions/BBs, and "prettifies" instruction op_str's
         :return: None
         '''
         self._gen_ins_map()

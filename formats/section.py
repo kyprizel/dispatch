@@ -15,6 +15,9 @@ class Section(object):
 
     orig_section = None
 
+    def __repr__(self):
+        return '<Section {} at vaddr {}>'.format(self.name, hex(self.vaddr))
+
     def contains_vaddr(self, vaddr):
         return self.vaddr <= vaddr < self.vaddr + self.size
 

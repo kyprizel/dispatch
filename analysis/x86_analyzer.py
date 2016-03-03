@@ -7,7 +7,6 @@ from base_analyzer import BaseAnalyzer
 class X86_Analyzer(BaseAnalyzer):
     def _create_disassembler(self):
         self._disassembler = Cs(CS_ARCH_X86, CS_MODE_32)
-        self._disassembler.detail = True
 
     def ins_uses_address_register(self, instruction):
         return 'ip' in instruction.op_str or 'sp' in instruction.op_str
@@ -117,4 +116,3 @@ class X86_Analyzer(BaseAnalyzer):
 class X86_64_Analyzer(X86_Analyzer):
     def _create_disassembler(self):
         self._disassembler = Cs(CS_ARCH_X86, CS_MODE_64)
-        self._disassembler.detail = True

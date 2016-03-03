@@ -52,6 +52,15 @@ class BaseExecutable(object):
         '''
         raise NotImplementedError()
 
+    def sections_to_disassemble(self):
+        '''
+        Iterates through each section in the executable that is supposed to be disassembled.
+        :return: Iterator
+        '''
+        for s in self.iter_sections():
+            if s.executable:
+                yield s
+
     def vaddr_is_executable(self, vaddr):
         '''
         Determine if the given virtual address is in a mapped executable memory segment.
