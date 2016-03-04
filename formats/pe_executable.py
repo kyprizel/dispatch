@@ -55,4 +55,13 @@ class PEExecutable(BaseExecutable):
         raise NotImplementedError()
 
     def replace_instruction(self, old_ins, new_asm):
-        raise NotImplementedError()
+        if len(new_asm) > old_ins.size:
+            raise ValueError('Length of new assembly must be <= size of old instruction')
+
+        self.binary.seek(self.vaddr_binary_offset(old_ins.address))
+        self.binary.write(new_asm)
+
+        # TODO: Update function instruction lists
+        self.binary.write('\x90' * (old_ins.size - len(new_asm)))
+
+        # TODO: Update checksum?

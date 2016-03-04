@@ -15,6 +15,10 @@ logging.debug('Functions found: {}'.format(executable.functions))
 # TODO: API so you can do something like this:
 # executable.function_named('main').instructions[0] = '\xcc'
 
+help_func = executable.function_named('sub_1004187')
+executable.replace_instruction(help_func.instructions[0], '\xcc')
+
+
 """
 instrumentation = '\xcc\xc3' # INT3, RET
 instrumentation_vaddr = executable.inject(instrumentation)
@@ -59,9 +63,10 @@ for function in [executable.function_named('main')]: #executable.iter_functions(
             executable.replace_instruction(instruction, call_ins)
 
             logging.debug('Replaced instruction at {} with call to {}'.format(hex(instruction.address), hex(ins_jump_vaddr)))
+"""
 
-f = open('a.out','wb')
+f = open('mod.exe','wb')
 f.write(executable.get_binary())
-f.close()"""
+f.close()
 
 cfg = executable.analyzer.cfg()
