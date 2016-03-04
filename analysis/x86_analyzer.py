@@ -59,7 +59,10 @@ class X86_Analyzer(BaseAnalyzer):
                 ops.append(cur_ins)
 
                 if ops[0].address not in self.executable.functions:
-                    f = Function(ops[0].address, ops[-1].address + ops[-1].size - ops[0].address, 'sub_'+hex(ops[0].address)[2:])
+                    f = Function(ops[0].address,
+                                 ops[-1].address + ops[-1].size - ops[0].address,
+                                 'sub_'+hex(ops[0].address)[2:],
+                                 self.executable)
                     self.executable.functions[f.address] = f
 
                 ops = []

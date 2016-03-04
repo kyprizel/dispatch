@@ -4,11 +4,12 @@ class Function(object):
     NORMAL_FUNC = 0
     DYNAMIC_FUNC = 1
 
-    def __init__(self, address, size, name, type=NORMAL_FUNC):
+    def __init__(self, address, size, name, executable, type=NORMAL_FUNC):
         self.address = address
         self.size = size
         self.name = name
         self.type = type
+        self._executable = executable
 
         # BELOW: Helpers used to explore the binary.
         # NOTE: These should *not* be directly modified at this time.
@@ -55,6 +56,7 @@ class Instruction(object):
         self.size = int(self.capstone_inst.size)
         self.groups = self.capstone_inst.groups
         self.bytes = self.capstone_inst.bytes
+
         self.comment = ''
 
         self._executable = executable
@@ -65,7 +67,11 @@ class Instruction(object):
     def __str__(self):
         s = self.mnemonic + ' ' + self.nice_op_str()
         if self.comment:
-            s += '\t// "{}"'.format(self.comment)
+            s += '; "{}"'.format(self.comment)
+        if self.address in self._executable.xrefs:
+            s += '; XREF={}'.format(', '.join(hex(a)[:-1] for a in self._executable.xrefs[self.address]))
+            # TODO: Print nice function relative offsets if the xref is in a function
+
         return s
 
     def nice_op_str(self):

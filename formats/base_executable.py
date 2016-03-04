@@ -28,6 +28,7 @@ class BaseExecutable(object):
         self.analyzer = None
         self.functions = {} # Vaddr: Function
         self.strings = {}
+        self.xrefs = {}
 
     def __repr__(self):
         return '<{} {} \'{}\'>'.format(self.architecture, self.__class__.__name__, self.fp)
