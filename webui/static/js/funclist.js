@@ -27,20 +27,25 @@ var load_function_list = function () {
             var func = functions[i];
             func.addEventListener('click', function(e) {
                 var func_el = e.srcElement;
-                $.get('/function_info/'+func_el.innerText, function(data) {
-                    var func = JSON.parse(data);
-                    var disas = document.getElementById('disas');
-                    $.get('/dis/'+func.name, function(data) {
-                        disas.innerText = data;
-                        layout_bbs(func);
-                    });
-                });
+                load_function(func_el.innerText);
             });
         }
     });
 
-    // Register toggle event
+    // Register keyboard events
     document.getElementsByTagName('body')[0].addEventListener('keydown', toggle_disass_style);
+    document.getElementsByTagName('body')[0].addEventListener('keydown', rename_function);
+}
+
+var load_function = function(name) {
+    $.get('/function_info/'+name, function(data) {
+        var func = JSON.parse(data);
+        var disas = document.getElementById('disas');
+        $.get('/dis/'+func.name, function(data) {
+            disas.innerText = data;
+            layout_bbs(func);
+        });
+    });
 }
 
 var layout_bbs = function(func, cfg) {
@@ -83,6 +88,19 @@ var instruction_clicked = function(e) {
     }
     selected_element = ins;
     selected_element.style['stroke'] = 'blue';
+}
+
+var rename_function = function(e) {
+    if (selected_element != undefined && e.keyCode == 78) { // n
+        var name = selected_element.innerHTML;
+        var new_name = prompt("Rename " + name + ":");
+        if (new_name != null) {
+            $.post('/rename/'+name+'/'+new_name, function(data) {
+                load_function_list(); // reload data
+                load_function(new_name); // load the new function to be the current view
+            });
+        }
+    }
 }
 
 var display_graph = true;

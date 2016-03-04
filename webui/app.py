@@ -52,7 +52,7 @@ def graph(function_name):
         addr = bb.address
         G.add_node(addr)
         n = G.get_node(addr)
-        n.attr['label'] = '-- ' + bb.parent.name + '@' + hex(bb.parent.address) + '+' + hex(bb.address - bb.parent.address) + \
+        n.attr['label'] = '-- ' + bb.parent.name + ' @ ' + hex(bb.parent.address) + '+' + hex(bb.address - bb.parent.address) + \
                 ' --\\n\\n' + '\\l'.join(hex(x.address)[2:] + ' ' + str(x) for x in bb.instructions) + '\\l'
         n.attr['shape'] = 'box'
     
@@ -71,6 +71,14 @@ def graph(function_name):
     dot = subprocess.Popen(['dot', '-Tsvg'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     stdout, stderr = dot.communicate(str(G))
     return stdout
+
+@app.route('/rename/<original_name>/<new_name>', methods=['POST'])
+def rename(original_name, new_name):
+    func = executable.function_named(original_name)
+    if func:
+        func.name = new_name
+        return "success"
+    return "failure, no such function"
 
 def setup_exe(exe):
     # this is absolutely disgusting but it works
