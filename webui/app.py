@@ -5,6 +5,7 @@ import pygraphviz as pgv
 
 app = Flask(__name__)
 executable = None
+cfg = None
 
 @app.route('/')
 def index():
@@ -42,9 +43,10 @@ def get_bbs(function_name):
 
 @app.route('/graph/<function_name>')
 def graph(function_name):
-    cfg = executable.analyzer.cfg()
+    #cfg = executable.analyzer.cfg()
+    global cfg
     
-    G = pgv.AGraph(directed=True)
+    G = pgv.AGraph(directed=True, splines="ortho")
     func = executable.function_named(function_name)
     for bb in func.iter_bbs():
         addr = bb.address
@@ -70,11 +72,16 @@ def graph(function_name):
     stdout, stderr = dot.communicate(str(G))
     return stdout
 
-def run(exe):
+def setup_exe(exe):
     # this is absolutely disgusting but it works
     global executable
+    global cfg
     executable = exe
     print "Beginning analysis..."
-    executable.analyze()
+    exe.analyze()
+    cfg = exe.analyzer.cfg() # cache cfg for speed
     print "Analysis complete!"
+
+def run(exe):
+    setup_exe(exe)
     app.run('0.0.0.0', port=3002, debug=True)

@@ -48,8 +48,41 @@ var layout_bbs = function(func, cfg) {
         console.log(data);
         var svg = document.createElement('div');
         svg.innerHTML = data;
+        document.getElementById('bbs').innerHTML = "";
         document.getElementById('bbs').appendChild(svg);
+        divide_instructions();
     });
+}
+
+var divide_instructions = function() {
+    var bbs = $('.node');
+    bbs.each(function(i, bb) {
+        Array.from(bb.children).forEach(function(child) {
+            var new_content = "";
+            // TODO: lex instructions more nicely to improve clickyness (and maybe add coloring?)
+            var ss = child.innerHTML.split(' ');
+            for (var i = 0; i < ss.length; i++) {
+                var x = ss[i];
+                new_content += "<tspan>"+x+"</tspan> ";
+            }
+            child.innerHTML = new_content;
+        });
+    });
+    var tspans = Array.from($('tspan'));
+    tspans.forEach(function(tsp) {
+        tsp.addEventListener('click', instruction_clicked);
+    });
+    
+}
+
+var selected_element = undefined;
+var instruction_clicked = function(e) {
+    var ins = e.srcElement;
+    if (selected_element != undefined) {
+        selected_element.style['stroke'] = 'none';
+    }
+    selected_element = ins;
+    selected_element.style['stroke'] = 'blue';
 }
 
 var display_graph = true;
