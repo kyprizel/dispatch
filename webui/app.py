@@ -1,6 +1,7 @@
 from flask import Flask,render_template,request
 import json
 import subprocess
+import pygraphviz as pgv
 
 app = Flask(__name__)
 executable = None
@@ -39,11 +40,34 @@ def get_bbs(function_name):
     prep_func = lambda func: map(prep_bb, func.iter_bbs())
     return json.dumps(prep_func(executable.function_named(function_name)))
 
-@app.route('/graph', methods=['POST'])
-def graph():
-    req = request.stream.read()
+@app.route('/graph/<function_name>')
+def graph(function_name):
+    cfg = executable.analyzer.cfg()
+    
+    G = pgv.AGraph(directed=True)
+    func = executable.function_named(function_name)
+    for bb in func.iter_bbs():
+        addr = bb.address
+        G.add_node(addr)
+        n = G.get_node(addr)
+        n.attr['label'] = '-- ' + bb.parent.name + '@' + hex(bb.parent.address) + '+' + hex(bb.address - bb.parent.address) + \
+                ' --\\n\\n' + '\\l'.join(hex(x.address)[2:] + ' ' + str(x) for x in bb.instructions) + '\\l'
+        n.attr['shape'] = 'box'
+    
+    for src,dst in cfg:
+        if func.contains_address(src) and func.contains_address(dst):
+            s = executable.bb_containing_vaddr(src)
+            d = executable.bb_containing_vaddr(dst)
+            if s is None or d is None:
+                print hex(src),hex(dst)
+                print s, d
+                continue
+            G.add_edge(s.address, d.address)
+    
+    G.layout('dot')
+    
     dot = subprocess.Popen(['dot', '-Tsvg'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
-    stdout, stderr = dot.communicate(req)
+    stdout, stderr = dot.communicate(str(G))
     return stdout
 
 def run(exe):

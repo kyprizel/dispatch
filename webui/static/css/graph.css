@@ -7,23 +7,26 @@
     display: block;
     background-color: #E0FFFF;
     width: 10wmin;
-    height: 98%;
+    height: 100%;
     overflow: auto; /* display scrollbar when overflow happens */
     overflow-x: scroll;
 }
 
-.bb {
-    border: 1px solid black;
-    background-color: pink;
-    display: block;
-    width: 300px;
-    height: auto;
-    position: relative;
+.graph polygon {
+	fill: #E0FFFF;
+}
+
+.node polygon {
+    fill: pink;
+}
+
+.edge polygon {
+	fill: black;
 }
 
 #disas {
     background-color: #FFFFE0;
-    height: 98%;
+    height: 100%;
     overflow: auto; /* display scrollbar when overflow happens */
     display: none;
 }
