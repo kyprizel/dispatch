@@ -48,7 +48,7 @@ var load_function = function(name) {
     });
 }
 
-var layout_bbs = function(func, cfg) {
+var layout_bbs = function(func) {
     $.get('/graph/'+func.name, function(data) {
         console.log(data);
         var svg = document.createElement('div');
