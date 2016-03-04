@@ -1,3 +1,8 @@
+// data about the current view
+var current_view = {
+    function_name: undefined
+}
+
 var load_function_list = function () {
     // Get the list of functions
     $.get('/function_list', function(data) {
@@ -41,6 +46,7 @@ var load_function = function(name) {
     $.get('/function_info/'+name, function(data) {
         var func = JSON.parse(data);
         var disas = document.getElementById('disas');
+        current_view.function_name = func.name;
         $.get('/dis/'+func.name, function(data) {
             disas.innerText = data;
             layout_bbs(func);
@@ -50,7 +56,6 @@ var load_function = function(name) {
 
 var layout_bbs = function(func) {
     $.get('/graph/'+func.name, function(data) {
-        console.log(data);
         var svg = document.createElement('div');
         svg.innerHTML = data;
         document.getElementById('bbs').innerHTML = "";
@@ -97,7 +102,11 @@ var rename_function = function(e) {
         if (new_name != null) {
             $.post('/rename/'+name+'/'+new_name, function(data) {
                 load_function_list(); // reload data
-                load_function(new_name); // load the new function to be the current view
+                if (current_view.function_name == name) {
+                    load_function(new_name); // load the new function to be the current view if we renamed the function we're in
+                } else {
+                    load_function(current_view.function_name); // reload the current view if we changed another function
+                }
             });
         }
     }
