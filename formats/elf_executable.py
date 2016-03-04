@@ -56,6 +56,12 @@ class ELFExecutable(BaseExecutable):
         for e_section in self.helper.iter_sections():
             yield section_from_elf_section(e_section)
 
+    def iter_string_sections(self):
+        STRING_SECTIONS = ['.rodata', '.data', '.bss']
+        for s in self.iter_sections():
+            if s.name in STRING_SECTIONS:
+                yield s
+
     def _extract_symbol_table(self):
         # Add in symbols from the PLT/rela.plt
         # .rela.plt contains indexes to reference both .dynsym (symbol names) and .plt (jumps to GOT)

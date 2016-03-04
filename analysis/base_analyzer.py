@@ -1,5 +1,5 @@
 import logging
-from capstone import *
+import re
 from collections import OrderedDict
 
 from constructs import *
@@ -104,6 +104,22 @@ class BaseAnalyzer(object):
                 if f.contains_address(addr):
                     f.instructions.append(self.ins_map[addr])
 
+    def _identify_strings(self):
+        '''
+        Extracts all strings from the executable and stores them in the strings dict (addr -> string)
+        :return: None
+        '''
+        # https://stackoverflow.com/questions/6804582/extract-strings-from-a-binary-file-in-python
+        chars = r"A-Za-z0-9/\-:.,_$%'()[\]<> "
+        shortest_run = 4
+        regexp = '[%s]{%d,}' % (chars, shortest_run)
+        pattern = re.compile(regexp)
+
+        for section in self.executable.iter_string_sections():
+            for string in pattern.finditer(section.raw):
+                vaddr = section.vaddr + string.start()
+                self.executable.strings[vaddr] = String(string.group(), vaddr, self.executable)
+
     def _identify_bbs(self):
         for func in self.executable.iter_functions():
             if func.instructions:
@@ -140,10 +156,12 @@ class BaseAnalyzer(object):
         self._gen_ins_map()
 
         self.executable._extract_symbol_table()
+
         self._identify_functions()
         self._populate_func_instructions()
-
         self._identify_bbs()
+
+        self._identify_strings()
 
     def cfg(self):
         '''

@@ -27,6 +27,7 @@ class BaseExecutable(object):
 
         self.analyzer = None
         self.functions = {} # Vaddr: Function
+        self.strings = {}
 
     def __repr__(self):
         return '<{} {} \'{}\'>'.format(self.architecture, self.__class__.__name__, self.fp)
@@ -60,6 +61,13 @@ class BaseExecutable(object):
         for s in self.iter_sections():
             if s.executable:
                 yield s
+
+    def iter_string_sections(self):
+        '''
+        Returns the section(s) with strings in this executable
+        :return: Section(s) with strings.
+        '''
+        raise NotImplementedError()
 
     def vaddr_is_executable(self, vaddr):
         '''

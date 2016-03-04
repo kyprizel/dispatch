@@ -55,6 +55,7 @@ class Instruction(object):
         self.size = int(self.capstone_inst.size)
         self.groups = self.capstone_inst.groups
         self.bytes = self.capstone_inst.bytes
+        self.comment = ''
 
         self._executable = executable
 
@@ -62,7 +63,10 @@ class Instruction(object):
         return '<Instruction at {}>'.format(hex(self.address))
 
     def __str__(self):
-        return self.mnemonic + ' ' + self.nice_op_str()
+        s = self.mnemonic + ' ' + self.nice_op_str()
+        if self.comment:
+            s += '\t// "{}"'.format(self.comment)
+        return s
 
     def nice_op_str(self):
         '''
@@ -70,14 +74,14 @@ class Instruction(object):
         relative offsets) if appropriate.
         :return: The nicely formatted operand string
         '''
-        s = self.op_str.split(', ')
+        op_strings = self.op_str.split(', ')
 
         # If this is an immediate call or jump, try to put a name to where we're calling/jumping to
         if CS_GRP_CALL in self.capstone_inst.groups or CS_GRP_JUMP in self.capstone_inst.groups:
             # jump/call destination will always be the last operand (even with conditional ARM branch instructions)
             operand = self.capstone_inst.operands[-1]
             if operand.imm in self._executable.functions:
-                s[-1] = self._executable.functions[operand.imm].name
+                op_strings[-1] = self._executable.functions[operand.imm].name
             elif self._executable.vaddr_is_executable(operand.imm):
                 func_addrs = self._executable.functions.keys()
                 func_addrs.sort(reverse=True)
@@ -85,7 +89,25 @@ class Instruction(object):
                     if func_addr < operand.imm:
                         break
                 diff = operand.imm - func_addr
-                s[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
+                op_strings[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
+        else:
+            for i, operand in enumerate(self.capstone_inst.operands):
+                if operand.type == CS_OP_IMM and operand.imm in self._executable.strings:
+                    referenced_string = self._executable.strings[operand.imm]
+                    op_strings[i] = referenced_string.short_name
+                    self.comment = referenced_string.string
 
+        return ', '.join(op_strings)
 
-        return ', '.join(s)
+class String(object):
+    def __init__(self, string, vaddr, executable):
+        self.string = string
+        self.short_name = self.string.replace(' ','')[:8]
+        self.vaddr = vaddr
+        self._executable = executable
+
+    def __repr__(self):
+        return '<String \'{}\' at {}>'.format(self.string, self.vaddr)
+
+    def __str__(self):
+        return self.string
