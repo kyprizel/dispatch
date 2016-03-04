@@ -15,6 +15,9 @@ class Section(object):
 
     orig_section = None
 
+    def __repr__(self):
+        return '<Section {} at vaddr {}>'.format(self.name, hex(self.vaddr))
+
     def contains_vaddr(self, vaddr):
         return self.vaddr <= vaddr < self.vaddr + self.size
 
@@ -51,7 +54,7 @@ def section_from_pe_section(pe_section, pe):
     s = Section()
     s.name = pe_section.Name
     s.vaddr = pe_section.VirtualAddress + pe.OPTIONAL_HEADER.ImageBase
-    s.offset = pe_section.get_file_offset()
+    s.offset = pe_section.PointerToRawData
     s.size = pe_section.SizeOfRawData
     s.raw = pe_section.get_data()
 

@@ -7,10 +7,13 @@ from base_analyzer import BaseAnalyzer
 class X86_Analyzer(BaseAnalyzer):
     def _create_disassembler(self):
         self._disassembler = Cs(CS_ARCH_X86, CS_MODE_32)
-        self._disassembler.detail = True
 
     def ins_uses_address_register(self, instruction):
-        return 'ip' in instruction.op_str or 'sp' in instruction.op_str
+        for op in instruction.capstone_inst.operands:
+            if op.type == CS_OP_REG and op.reg in (X86_REG_EIP, X86_REG_RIP, X86_REG_ESP, X86_REG_RSP):
+                return True
+
+        return False
 
     def _identify_functions(self):
         STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0,1,2
@@ -22,8 +25,21 @@ class X86_Analyzer(BaseAnalyzer):
         for addr in self.ins_map:
             cur_ins = self.ins_map[addr]
 
-            if state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'push' and cur_ins.capstone_inst.operands[0].type == CS_OP_REG and \
-                cur_ins.capstone_inst.operands[0].reg in (X86_REG_EBP, X86_REG_RBP):
+            # Windows sometimes puts `mov edi, edi` as the first instruction in a function for hot patching, so we check
+            # for this case to make sure the function we detect starts at the correct address.
+            #  https://blogs.msdn.microsoft.com/oldnewthing/20110921-00/?p=9583
+            if state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'mov' and \
+                    cur_ins.capstone_inst.operands[0].type == CS_OP_REG and \
+                    cur_ins.capstone_inst.operands[0].reg == X86_REG_EDI and \
+                    cur_ins.capstone_inst.operands[1].type == CS_OP_REG and \
+                    cur_ins.capstone_inst.operands[1].reg == X86_REG_EDI:
+
+                state = STATE_IN_PROLOGUE
+                ops.append(cur_ins)
+
+            elif state in (STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE) and cur_ins.mnemonic == 'push' and \
+                    cur_ins.capstone_inst.operands[0].type == CS_OP_REG and \
+                    cur_ins.capstone_inst.operands[0].reg in (X86_REG_EBP, X86_REG_RBP):
 
                 state = STATE_IN_PROLOGUE
                 ops.append(cur_ins)
@@ -43,7 +59,7 @@ class X86_Analyzer(BaseAnalyzer):
                 ops.append(cur_ins)
 
                 if ops[0].address not in self.executable.functions:
-                    f = Function(ops[0].address, ops[-1].address + ops[-1].size - ops[0].address, 'sub_'+hex(ops[0].address))
+                    f = Function(ops[0].address, ops[-1].address + ops[-1].size - ops[0].address, 'sub_'+hex(ops[0].address)[2:])
                     self.executable.functions[f.address] = f
 
                 ops = []
@@ -117,4 +133,3 @@ class X86_Analyzer(BaseAnalyzer):
 class X86_64_Analyzer(X86_Analyzer):
     def _create_disassembler(self):
         self._disassembler = Cs(CS_ARCH_X86, CS_MODE_64)
-        self._disassembler.detail = True

@@ -1,5 +1,5 @@
 import logging
-from capstone import *
+import re
 from collections import OrderedDict
 
 from constructs import *
@@ -20,6 +20,8 @@ class BaseAnalyzer(object):
         self.ins_map = OrderedDict()
 
         self._create_disassembler()
+        self._disassembler.detail = True
+        self._disassembler.skipdata = True
     
     def __repr__(self):
         return '<{} for {} {} \'{}\'>'.format(self.__class__.__name__,
@@ -39,10 +41,10 @@ class BaseAnalyzer(object):
         Generates the instruction lookup dictionary
         :return: None
         '''
-        for section in self.executable.iter_sections():
-            if section.executable:
-                for ins in self._disassembler.disasm(section.raw, section.vaddr):
-                    self.ins_map[ins.address] = Instruction(ins)
+        for section in self.executable.sections_to_disassemble():
+            for ins in self._disassembler.disasm(section.raw, section.vaddr):
+                if ins.id: # .byte "instructions" have an id of 0
+                    self.ins_map[ins.address] = Instruction(ins, self.executable)
     
     def _is_jump(self, instruction):
         '''
@@ -102,6 +104,22 @@ class BaseAnalyzer(object):
                 if f.contains_address(addr):
                     f.instructions.append(self.ins_map[addr])
 
+    def _identify_strings(self):
+        '''
+        Extracts all strings from the executable and stores them in the strings dict (addr -> string)
+        :return: None
+        '''
+        # https://stackoverflow.com/questions/6804582/extract-strings-from-a-binary-file-in-python
+        chars = r"A-Za-z0-9/\-:.,_$%'()[\]<> "
+        shortest_run = 4
+        regexp = '[%s]{%d,}' % (chars, shortest_run)
+        pattern = re.compile(regexp)
+
+        for section in self.executable.iter_string_sections():
+            for string in pattern.finditer(section.raw):
+                vaddr = section.vaddr + string.start()
+                self.executable.strings[vaddr] = String(string.group(), vaddr, self.executable)
+
     def _identify_bbs(self):
         for func in self.executable.iter_functions():
             if func.instructions:
@@ -128,27 +146,22 @@ class BaseAnalyzer(object):
                         bb.instructions = bb_instructions
 
                         func.bbs.append(bb)
-
-    def _prettify_operands(self):
-        for func in self.executable.iter_functions():
-            for insn in func.instructions:
-                insn.prettify_operands(self)
     
     def analyze(self):
         '''
         Run the analysis subroutines.
-        Generates the instruction map and runs radare2 to get functions/BBs
+        Generates the instruction map, extracts symbol tables, identifies functions/BBs, and "prettifies" instruction op_str's
         :return: None
         '''
         self._gen_ins_map()
 
         self.executable._extract_symbol_table()
+
         self._identify_functions()
         self._populate_func_instructions()
-
         self._identify_bbs()
 
-        self._prettify_operands()
+        self._identify_strings()
 
     def cfg(self):
         '''

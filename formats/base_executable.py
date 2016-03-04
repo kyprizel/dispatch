@@ -27,6 +27,7 @@ class BaseExecutable(object):
 
         self.analyzer = None
         self.functions = {} # Vaddr: Function
+        self.strings = {}
 
     def __repr__(self):
         return '<{} {} \'{}\'>'.format(self.architecture, self.__class__.__name__, self.fp)
@@ -49,6 +50,22 @@ class BaseExecutable(object):
         '''
         Iterates through each section in the executable.
         :return: Iterator
+        '''
+        raise NotImplementedError()
+
+    def sections_to_disassemble(self):
+        '''
+        Iterates through each section in the executable that is supposed to be disassembled.
+        :return: Iterator
+        '''
+        for s in self.iter_sections():
+            if s.executable:
+                yield s
+
+    def iter_string_sections(self):
+        '''
+        Returns the section(s) with strings in this executable
+        :return: Section(s) with strings.
         '''
         raise NotImplementedError()
 
