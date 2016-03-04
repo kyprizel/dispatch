@@ -1,4 +1,5 @@
 import pefile
+from SectionDoubleP import SectionDoubleP
 
 from base_executable import *
 from section import *
@@ -27,6 +28,9 @@ class PEExecutable(BaseExecutable):
         else:
             return None
 
+    def get_binary(self):
+        return self.helper.write()
+
     def iter_sections(self):
         for pe_section in self.helper.sections:
             yield section_from_pe_section(pe_section, self.helper)
@@ -52,16 +56,28 @@ class PEExecutable(BaseExecutable):
                     self.functions[symbol.address].name = symbol.name
 
     def inject(self, asm, update_entry=False):
-        raise NotImplementedError()
+        SECTION_SIZE = 0x1000
+
+        has_injection_section = [s for s in self.helper.sections if s.Name == '.aio_inj']
+
+        if not has_injection_section:
+            sdp = SectionDoubleP(self.helper)
+            to_inject = asm + '\x00' * (SECTION_SIZE - len(asm))
+            self.helper = sdp.push_back(Name='.aio_inj', Characteristics=0x60000020, Data=to_inject)
+            inject_rva = self.helper.sections[-1].VirtualAddress
+        else:
+            section = has_injection_section[0]
+            inject_rva = section.VirtualAddress + len(section.get_data().rstrip('\x00'))
+            section.set_bytes_at_rva(inject_rva, asm)
+
+        if update_entry:
+            self.helper.OPTIONAL_HEADER.AddressOfEntryPoint = inject_rva
+
+        return inject_rva + self.helper.OPTIONAL_HEADER.ImageBase
 
     def replace_instruction(self, old_ins, new_asm):
         if len(new_asm) > old_ins.size:
             raise ValueError('Length of new assembly must be <= size of old instruction')
 
-        self.binary.seek(self.vaddr_binary_offset(old_ins.address))
-        self.binary.write(new_asm)
-
-        # TODO: Update function instruction lists
-        self.binary.write('\x90' * (old_ins.size - len(new_asm)))
-
-        # TODO: Update checksum?
+        self.helper.set_bytes_at_rva(old_ins.address - self.helper.OPTIONAL_HEADER.ImageBase,
+                                     new_asm + '\x90' * (old_ins.size - len(new_asm)))

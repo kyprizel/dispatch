@@ -12,15 +12,25 @@ executable.analyze()
 
 logging.debug('Functions found: {}'.format(executable.functions))
 
-# TODO: API so you can do something like this:
-# executable.function_named('main').instructions[0] = '\xcc'
 
-help_func = executable.function_named('sub_1004187')
-executable.replace_instruction(help_func.instructions[0], '\xcc')
+# For tests/ftp.exe
+executable.function_named('sub_1004187').name = 'print_help'
 
+help_func = executable.function_named('print_help')
+
+instrumentation = '\xcc\xc3' # INT3, RET
+
+injected_vaddr = executable.inject(instrumentation)
+
+# Windows graciously gives us a perfect jmp/call trampoline to inject into for their hot patching.
+# First, we jump -7 bytes backwards (2 bytes for the jmp itself and 5 because that's how many bytes they give us)
+# Then we can just inject a full 5 byte far call to our instrumentation (which is put into a new section in the PE)
+executable.replace_instruction(help_func.instructions[0], '\xeb\xf9') # jmp -5
+
+executable.helper.set_bytes_at_rva(help_func.instructions[0].address - 5 - executable.helper.OPTIONAL_HEADER.ImageBase,
+                                   '\xff' + struct.pack('<i', injected_vaddr + executable.helper.OPTIONAL_HEADER.ImageBase))
 
 """
-instrumentation = '\xcc\xc3' # INT3, RET
 instrumentation_vaddr = executable.inject(instrumentation)
 logging.debug('Injected instrumentation asm at {}'.format(hex(instrumentation_vaddr)))
 
