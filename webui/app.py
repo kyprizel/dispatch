@@ -72,6 +72,17 @@ def graph(function_name):
     stdout, stderr = dot.communicate(str(G))
     return stdout
 
+@app.route('/xrefs/<function_name>')
+def xrefs(function_name):
+    function_named = lambda x: executable.function_containing_vaddr(x).name
+    func = executable.function_named(function_name);
+    if func is not None and func.address in executable.xrefs:
+        xrefs = executable.xrefs[func.address]
+        functions_referring = sorted(list(set(map(function_named, xrefs))))
+        return json.dumps(functions_referring)
+    else:
+        return "[]"
+
 @app.route('/rename/<original_name>/<new_name>', methods=['POST'])
 def rename(original_name, new_name):
     func = executable.function_named(original_name)

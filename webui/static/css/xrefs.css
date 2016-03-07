@@ -1,0 +1,17 @@
+#xrefs {
+    height: auto;
+    border: 1px solid black;
+    display:inline-block;
+    background-color: cyan;
+    width: 100%;
+}
+
+.heading {
+    text-align: center;
+    background-color: darkcyan;
+}
+
+.xref:hover {
+    background-color: lightgreen;
+}
+

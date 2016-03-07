@@ -1,6 +1,21 @@
 // data about the current view
 var current_view = {
-    function_name: undefined
+    function_name: undefined,
+    functions: undefined,
+    selected_element: undefined
+}
+
+var setup = function() {
+    load_function_list();
+
+    // Register keyboard events
+    document.getElementsByTagName('body')[0].addEventListener('keydown', toggle_disass_style);
+    document.getElementsByTagName('body')[0].addEventListener('keydown', rename_function);
+    document.getElementsByTagName('body')[0].addEventListener('keydown', sync);
+    document.getElementsByTagName('body')[0].addEventListener('keydown', xrefs_button_event);
+
+    // Testing: autoload xrefs to json_node_get_kind
+    //load_xrefs_menu('json_node_get_kind');
 }
 
 var load_function_list = function () {
@@ -14,12 +29,18 @@ var load_function_list = function () {
         }
 
         var functions = JSON.parse(data);
+        current_view.functions = Array.from(functions);
         for (var i = 0; i < functions.length; i++) {
             var node = document.createElement('span');
             node.innerText = functions[i];
             node.className = 'function';
             functions[i] = node;
         }
+
+        var heading = document.createElement('div');
+        heading.className = 'heading';
+        heading.innerHTML = '(✿◕‿◕) functions (◕‿◕✿)';
+        function_list.appendChild(heading);
 
         // Sort the list of functions when we load the page
 
@@ -36,12 +57,6 @@ var load_function_list = function () {
             });
         }
     });
-
-    // Register keyboard events
-    document.getElementsByTagName('body')[0].addEventListener('keydown', toggle_disass_style);
-    document.getElementsByTagName('body')[0].addEventListener('keydown', rename_function);
-    document.getElementsByTagName('body')[0].addEventListener('keydown', sync);
-    
 }
 
 var load_function = function(name) {
@@ -53,6 +68,7 @@ var load_function = function(name) {
             disas.innerText = data;
             layout_bbs(func);
         });
+        load_xrefs_menu(name);
     });
 }
 
@@ -92,19 +108,22 @@ var divide_instructions = function() {
     
 }
 
-var selected_element = undefined;
 var instruction_clicked = function(e) {
     var ins = e.srcElement;
-    if (selected_element != undefined) {
-        selected_element.style['stroke'] = 'none';
+    if (ins == current_view.selected_element) { // double-clicking element
+        // TODO: do things when double clicking an element
+    } else {
+        if (current_view.selected_element != undefined) {
+            current_view.selected_element.style['stroke'] = 'none';
+        }
+        current_view.selected_element = ins;
+        current_view.selected_element.style['stroke'] = 'blue';
     }
-    selected_element = ins;
-    selected_element.style['stroke'] = 'blue';
 }
 
 var rename_function = function(e) {
-    if (selected_element != undefined && e.keyCode == 78) { // n
-        var name = selected_element.innerHTML;
+    if (current_view.selected_element != undefined && e.keyCode == 78) { // n
+        var name = current_view.selected_element.innerHTML;
         var new_name = prompt("Rename " + name + ":");
         if (new_name != null) {
             $.post('/rename/'+name+'/'+new_name, function(data) {
@@ -124,6 +143,45 @@ var reload_data = function() {
     if (current_view.function_name != undefined) {
         load_function(current_view.function_name);
     }
+}
+
+var xrefs_button_event = function(e) {
+    if (e.keyCode == 88 && // x
+        current_view.selected_element != undefined &&
+        current_view.functions.indexOf(current_view.selected_element.innerHTML) != -1) {
+            var function_name = current_view.selected_element.innerHTML;
+            load_xrefs_menu(function_name);
+    }
+}
+
+var load_xrefs_menu = function(function_name) {
+    $.get('/xrefs/'+function_name , function(xrefs) {
+        xrefs = JSON.parse(xrefs);
+        var list = document.createElement('div');
+        list.id = 'xrefs';
+        var heading = document.createElement('div');
+        heading.className = 'heading';
+        heading.innerHTML = '(✿◕‿◕) x-refs (◕‿◕✿)';
+        list.appendChild(heading);
+
+        xrefs.forEach(function(xref) {
+            var li = document.createElement('div');
+            li.innerHTML = xref;
+            li.className = 'xref';
+            list.appendChild(li);
+            li.addEventListener('click', function(e) {
+                var func_el = e.srcElement;
+                load_function(func_el.innerText);
+            });
+        });
+
+        var func_list = document.querySelectorAll('#functionlist')[0];
+        var old_xrefs = document.querySelectorAll('#xrefs')[0];
+        if (old_xrefs) {
+            func_list.removeChild(document.querySelectorAll('#xrefs')[0]);
+        }
+        func_list.appendChild(list);
+    });
 }
 
 var sync = function(e) {
@@ -148,4 +206,4 @@ var toggle_disass_style = function(e) {
     }
 }
 
-document.addEventListener('DOMContentLoaded', load_function_list);
+document.addEventListener('DOMContentLoaded', setup);
