@@ -69,15 +69,20 @@ var layout_bbs = function(func) {
 var divide_instructions = function() {
     var bbs = $('.node');
     bbs.each(function(i, bb) {
-        Array.from(bb.children).forEach(function(child) {
+        var bb_addr = undefined; // address of the basic block's head
+        Array.from(bb.children).forEach(function(insn_block) {
             var new_content = "";
             // TODO: lex instructions more nicely to improve clickyness (and maybe add coloring?)
-            var ss = child.innerHTML.split(' ');
-            for (var i = 0; i < ss.length; i++) {
-                var x = ss[i];
-                new_content += "<tspan>"+x+"</tspan> ";
+            var ss = insn_block.innerHTML.split(' ');
+            if (insn_block.tagName.toLowerCase() == 'title') {
+                bb_addr = insn_block.innerHTML;
+            } else {
+                for (var i = 0; i < ss.length; i++) {
+                    var x = ss[i];
+                    new_content += "<tspan class=\""+bb_addr+"\">"+x+"</tspan> ";
+                }
+                insn_block.innerHTML = new_content;
             }
-            child.innerHTML = new_content;
         });
     });
     var tspans = Array.from($('tspan'));
