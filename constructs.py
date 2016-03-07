@@ -117,3 +117,30 @@ class String(object):
 
     def __str__(self):
         return self.string
+
+class CFGEdge(object):
+    # Edge with no special information. Could be from a default fall-through, unconditional jump, etc.
+    DEFAULT = 0
+
+    # Edge from a conditional jump. Two of these should be added for each cond. jump, one for the True, and one for False
+    COND_JUMP = 1
+
+    # Edge from a switch/jump table. One edge should be added for each entry, and the corresponding key set as the value
+    SWITCH = 2
+
+    def __init__(self, src, dst, type, value=None):
+        self.src = src
+        self.dst = dst
+        self.type = type
+        self.value = value
+
+    def __eq__(self, other):
+        if isinstance(other, CFGEdge) and self.src == other.src and self.dst == other.dst and self.type == other.type:
+            return True
+        return False
+
+    def __ne__(self, other):
+        return not self.__eq__(other)
+
+    def __repr__(self):
+        return '<CFGEdge from {} to {}>'.format(self.src, self.dst)

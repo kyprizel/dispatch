@@ -80,7 +80,8 @@ class X86_Analyzer(BaseAnalyzer):
                     if CS_GRP_CALL in ins.capstone_inst.groups:
                         call_addr = ins.capstone_inst.operands[-1].imm
                         if self.executable.vaddr_is_executable(call_addr):
-                            edges.add((ins.address, call_addr))
+                            edge = CFGEdge(last_ins.address, last_ins.address + last_ins.size, CFGEdge.DEFAULT)
+                            edges.add(edge)
 
                 for cur_bb in f.bbs:
                     last_ins = cur_bb.instructions[-1]
@@ -88,16 +89,23 @@ class X86_Analyzer(BaseAnalyzer):
                     if CS_GRP_JUMP in last_ins.capstone_inst.groups:
                         if last_ins.capstone_inst.operands[-1].type == CS_OP_IMM:
                             jmp_addr = last_ins.capstone_inst.operands[-1].imm
+                            next_addr = last_ins.address + last_ins.size
+
                             if self.executable.vaddr_is_executable(jmp_addr):
-                                edges.add((last_ins.address, jmp_addr))
-                            if last_ins.mnemonic != 'jmp':
+                                next_addr = last_ins.address + last_ins.size
+                                edge = CFGEdge(last_ins.address, next_addr, CFGEdge.COND_JUMP, True)
+                                edges.add(edge)
+                            if last_ins.mnemonic != 'jmp': # Looking for jne, jnz, etc.
                                 # Only add the "fall-through" case if the jump is conditional
                                 # TODO: opcode checking instead of mnemonic comparisons
-                                edges.add((last_ins.address, last_ins.address + last_ins.size))
+                                edge = CFGEdge(last_ins.address, next_addr, CFGEdge.COND_JUMP, False)
+                                edges.add(edge)
                     elif last_ins != f.instructions[-1]:
                         # Otherwise, if we're just at the end of a BB that's not the end of the function, just fall
                         # through to the next of the instruction
-                        edges.add((last_ins.address, last_ins.address + last_ins.size))
+                        edge = CFGEdge(last_ins.address, last_ins.address + last_ins.size, CFGEdge.DEFAULT)
+                        edges.add(edge)
+
 
                 # Jump table detection.
                 # Looking for:
@@ -127,8 +135,9 @@ class X86_Analyzer(BaseAnalyzer):
 
                         entries = struct.unpack(self.executable.pack_endianness + (self.executable.address_pack_type*num_cases), table)
 
-                        for addr in entries:
-                            edges.add((instructions[4].address, addr))
+                        for idx, addr in enumerate(entries):
+                            edge = CFGEdge(instructions[4].address, addr, CFGEdge.SWITCH, idx)
+                            edges.add(edge)
 
 
         return edges

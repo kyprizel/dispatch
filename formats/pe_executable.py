@@ -35,6 +35,9 @@ class PEExecutable(BaseExecutable):
         for pe_section in self.helper.sections:
             yield section_from_pe_section(pe_section, self.helper)
 
+    def iter_string_sections(self):
+        return []
+
     def _extract_symbol_table(self):
         # Load in stuff from the IAT
         for dll in self.helper.DIRECTORY_ENTRY_IMPORT:
