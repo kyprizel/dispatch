@@ -91,14 +91,18 @@ class X86_Analyzer(BaseAnalyzer):
                             jmp_addr = last_ins.capstone_inst.operands[-1].imm
 
                             if self.executable.vaddr_is_executable(jmp_addr):
-                                edge = CFGEdge(last_ins.address, jmp_addr, CFGEdge.COND_JUMP, True)
-                                edges.add(edge)
-                            if last_ins.mnemonic != 'jmp': # Looking for jne, jnz, etc.
-                                # Only add the "fall-through" case if the jump is conditional
-                                # TODO: opcode checking instead of mnemonic comparisons
-                                next_addr = last_ins.address + last_ins.size
-                                edge = CFGEdge(last_ins.address, next_addr, CFGEdge.COND_JUMP, False)
-                                edges.add(edge)
+                                if last_ins.mnemonic == 'jmp':
+                                    edge = CFGEdge(last_ins.address, jmp_addr, CFGEdge.DEFAULT)
+                                    edges.add(edge)
+                                else:  # Conditional jump
+                                    # True case
+                                    edge = CFGEdge(last_ins.address, jmp_addr, CFGEdge.COND_JUMP, True)
+                                    edges.add(edge)
+
+                                    # Default/fall-through case
+                                    next_addr = last_ins.address + last_ins.size
+                                    edge = CFGEdge(last_ins.address, next_addr, CFGEdge.COND_JUMP, False)
+                                    edges.add(edge)
                     elif last_ins != f.instructions[-1]:
                         # Otherwise, if we're just at the end of a BB that's not the end of the function, just fall
                         # through to the next of the instruction
