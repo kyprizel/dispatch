@@ -40,6 +40,8 @@ var load_function_list = function () {
     // Register keyboard events
     document.getElementsByTagName('body')[0].addEventListener('keydown', toggle_disass_style);
     document.getElementsByTagName('body')[0].addEventListener('keydown', rename_function);
+    document.getElementsByTagName('body')[0].addEventListener('keydown', sync);
+    
 }
 
 var load_function = function(name) {
@@ -109,6 +111,19 @@ var rename_function = function(e) {
                 }
             });
         }
+    }
+}
+
+var reload_data = function() {
+    load_function_list();
+    if (current_view.function_name != undefined) {
+        load_function(current_view.function_name);
+    }
+}
+
+var sync = function(e) {
+    if (e.keyCode == 82) { // r
+        reload_data();
     }
 }
 
