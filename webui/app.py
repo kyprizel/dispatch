@@ -46,7 +46,7 @@ def graph(function_name):
     #cfg = executable.analyzer.cfg()
     global cfg
     
-    G = pgv.AGraph(directed=True, splines="ortho")
+    G = pgv.AGraph(directed=True, splines="ortho", bgcolor='#E0FFFF')
     func = executable.function_named(function_name)
     for bb in func.iter_bbs():
         addr = bb.address
@@ -56,15 +56,25 @@ def graph(function_name):
                 ' --\\n\\n' + '\\l'.join(hex(x.address)[2:] + ' ' + str(x) for x in bb.instructions) + '\\l'
         n.attr['shape'] = 'box'
     
-    for src,dst in cfg:
-        if func.contains_address(src) and func.contains_address(dst):
-            s = executable.bb_containing_vaddr(src)
-            d = executable.bb_containing_vaddr(dst)
+    for edge in cfg:
+        if func.contains_address(edge.src) and func.contains_address(edge.dst):
+            s = executable.bb_containing_vaddr(edge.src)
+            d = executable.bb_containing_vaddr(edge.dst)
             if s is None or d is None:
-                print hex(src),hex(dst)
+                print hex(edge.src),hex(edge.dst)
                 print s, d
                 continue
-            G.add_edge(s.address, d.address)
+            # we have to hardcode the types here because we can't import CFGEdge...
+            if edge.type == 0: # CFGEdge.DEFAULT
+                color = "black"
+            elif edge.type == 1: # CFGEdge.COND_JUMP
+                if edge.value:
+                    color = "green"
+                else:
+                    color = "red"
+            elif edge.type == 2: # CFGEdge.SWITCH
+                color = "magenta"
+            G.add_edge(s.address, d.address, color=color)
     
     G.layout('dot')
     

@@ -12,16 +12,12 @@
     overflow-x: scroll;
 }
 
-.graph polygon {
-	fill: #E0FFFF;
-}
-
 .node polygon {
     fill: pink;
 }
 
-.edge polygon {
-	fill: black;
+.edge path {
+    stroke-width: 3px;
 }
 
 #disas {
