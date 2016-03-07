@@ -111,7 +111,9 @@ var divide_instructions = function() {
 var instruction_clicked = function(e) {
     var ins = e.srcElement;
     if (ins == current_view.selected_element) { // double-clicking element
-        // TODO: do things when double clicking an element
+        if (current_view.functions.indexOf(ins.innerHTML) != -1) { // if it's a function, jump to it
+            load_function(ins.innerHTML);
+        }
     } else {
         if (current_view.selected_element != undefined) {
             current_view.selected_element.style['stroke'] = 'none';
