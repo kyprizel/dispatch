@@ -111,7 +111,7 @@ class BaseAnalyzer(object):
         '''
         # https://stackoverflow.com/questions/6804582/extract-strings-from-a-binary-file-in-python
         chars = r"A-Za-z0-9/\-:.,_$%'()[\]<> "
-        shortest_run = 4
+        shortest_run = 3
         regexp = '[%s]{%d,}' % (chars, shortest_run)
         pattern = re.compile(regexp)
 
@@ -151,7 +151,7 @@ class BaseAnalyzer(object):
         for addr, ins in self.ins_map.iteritems():
             for operand in ins.capstone_inst.operands:
                 if operand.type == CS_OP_IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
-                    if addr in self.executable.xrefs:
+                    if operand.imm in self.executable.xrefs:
                         self.executable.xrefs[operand.imm].add(addr)
                     else:
                         self.executable.xrefs[operand.imm] = set([addr])
