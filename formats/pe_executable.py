@@ -44,14 +44,20 @@ class PEExecutable(BaseExecutable):
                 else:
                     name = 'ordinal_' + str(imp.ordinal) + '@' + dll.dll
 
-                self.functions[imp.address] = Function(imp.address, 8 if self.is_64_bit() else 4, name)
+                self.functions[imp.address] = Function(imp.address,
+                                                       8 if self.is_64_bit() else 4,
+                                                       name,
+                                                       self)
 
         # Load in information from the EAT if it exists
         if hasattr(self.helper, 'DIRECTORY_ENTRY_EXPORT'):
             for symbol in self.helper.DIRECTORY_ENTRY_EXPORT.symbols:
                 if symbol.address not in self.functions:
                     # TODO: Get size of function through CFG analysis or something similar
-                    self.functions[symbol.address] = Function(symbol.address, 0, symbol.name)
+                    self.functions[symbol.address] = Function(symbol.address,
+                                                              0,
+                                                              symbol.name,
+                                                              self)
                 else:
                     self.functions[symbol.address].name = symbol.name
 

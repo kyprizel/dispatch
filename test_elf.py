@@ -1,6 +1,6 @@
 from formats import *
 
-import logging, struct, sys
+import logging, sys
 
 logging.basicConfig(level=logging.DEBUG)
 

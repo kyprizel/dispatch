@@ -146,7 +146,16 @@ class BaseAnalyzer(object):
                         bb.instructions = bb_instructions
 
                         func.bbs.append(bb)
-    
+
+    def _mark_xrefs(self):
+        for addr, ins in self.ins_map.iteritems():
+            for operand in ins.capstone_inst.operands:
+                if operand.type == CS_OP_IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
+                    if addr in self.executable.xrefs:
+                        self.executable.xrefs[operand.imm].add(addr)
+                    else:
+                        self.executable.xrefs[operand.imm] = set([addr])
+
     def analyze(self):
         '''
         Run the analysis subroutines.
@@ -160,6 +169,7 @@ class BaseAnalyzer(object):
         self._identify_functions()
         self._populate_func_instructions()
         self._identify_bbs()
+        self._mark_xrefs()
 
         self._identify_strings()
 

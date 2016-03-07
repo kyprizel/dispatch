@@ -78,7 +78,11 @@ class ELFExecutable(BaseExecutable):
                 # index to account for it.
                 plt_addr = plt['sh_addr'] + ((idx+1) * plt['sh_entsize'])
 
-                f = Function(plt_addr, plt['sh_entsize'], symbol_name + '@PLT', type=Function.DYNAMIC_FUNC)
+                f = Function(plt_addr,
+                             plt['sh_entsize'],
+                             symbol_name + '@PLT',
+                             self,
+                             type=Function.DYNAMIC_FUNC)
                 self.functions[plt_addr] = f
 
 
@@ -104,7 +108,10 @@ class ELFExecutable(BaseExecutable):
                                 function_vaddrs.add(symbol['st_value'])
 
                                 if symbol['st_size']:
-                                    f = Function(symbol['st_value'], symbol['st_size'], symbol.name)
+                                    f = Function(symbol['st_value'],
+                                                 symbol['st_size'],
+                                                 symbol.name,
+                                                 self)
                                     self.functions[symbol['st_value']] = f
 
 
@@ -113,7 +120,11 @@ class ELFExecutable(BaseExecutable):
                 for cur_addr, next_addr in zip(function_vaddrs[:-1], function_vaddrs[1:]):
                     # If st_size was set, we already added the function above, so don't add it again.
                     if cur_addr not in self.functions:
-                        f = Function(cur_addr, next_addr - cur_addr, name_for_addr[cur_addr], type=Function.DYNAMIC_FUNC)
+                        f = Function(cur_addr,
+                                     next_addr - cur_addr,
+                                     name_for_addr[cur_addr],
+                                     self,
+                                     type=Function.DYNAMIC_FUNC)
                         self.functions[cur_addr] = f
 
         # TODO: Automatically find and label main from call to libc_start_main
