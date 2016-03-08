@@ -76,8 +76,6 @@ def graph(function_name):
                 color = "magenta"
             G.add_edge(s.address, d.address, color=color)
     
-    G.layout('dot')
-    
     dot = subprocess.Popen(['dot', '-Tsvg'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     stdout, stderr = dot.communicate(str(G))
     return stdout
