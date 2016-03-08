@@ -82,20 +82,43 @@ var layout_bbs = function(func) {
     });
 }
 
+var parse_instruction = function(insn) {
+    var tokens = [];
+    var curr_token = "";
+    Array.from(insn).forEach(function(c) {
+        switch (c) {
+        case '[':
+        case ']':
+        case ',':
+        case '+':
+        case ' ':
+            tokens.push(curr_token);
+            tokens.push(c);
+            curr_token = "";
+            break;
+        default:
+            curr_token += c;
+            break;
+        }
+    });
+    tokens.push(curr_token);
+    return tokens;
+}
+
 var divide_instructions = function() {
     var bbs = $('.node');
     bbs.each(function(i, bb) {
         var bb_addr = undefined; // address of the basic block's head
         Array.from(bb.children).forEach(function(insn_block) {
             var new_content = "";
-            // TODO: lex instructions more nicely to improve clickyness (and maybe add coloring?)
-            var ss = insn_block.innerHTML.split(' ');
+            // TODO: parse instructions more nicely to improve clickyness (and maybe add coloring?)
+            var ss = parse_instruction(insn_block.innerHTML);
             if (insn_block.tagName.toLowerCase() == 'title') {
                 bb_addr = insn_block.innerHTML;
             } else {
                 for (var i = 0; i < ss.length; i++) {
                     var x = ss[i];
-                    new_content += "<tspan class=\""+bb_addr+"\">"+x+"</tspan> ";
+                    new_content += "<tspan class=\""+bb_addr+"\">"+x+"</tspan>";
                 }
                 insn_block.innerHTML = new_content;
             }
@@ -103,9 +126,9 @@ var divide_instructions = function() {
     });
     var tspans = Array.from($('tspan'));
     tspans.forEach(function(tsp) {
-        if (current_view.functions.indexOf(tsp.innerHTML) != -1) {
+        //if (current_view.functions.indexOf(tsp.innerHTML) != -1) {
             tsp.addEventListener('click', instruction_clicked);
-        }
+        //}
     });
     
 }
