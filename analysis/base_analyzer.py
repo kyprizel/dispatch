@@ -41,10 +41,7 @@ class BaseAnalyzer(object):
         Generates the instruction lookup dictionary
         :return: None
         '''
-        for section in self.executable.sections_to_disassemble():
-            for ins in self._disassembler.disasm(section.raw, section.vaddr):
-                if ins.id: # .byte "instructions" have an id of 0
-                    self.ins_map[ins.address] = Instruction(ins, self.executable)
+        raise NotImplementedError()
     
     def _is_jump(self, instruction):
         '''

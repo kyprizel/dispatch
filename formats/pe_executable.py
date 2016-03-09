@@ -48,7 +48,7 @@ class PEExecutable(BaseExecutable):
                     name = 'ordinal_' + str(imp.ordinal) + '@' + dll.dll
 
                 self.functions[imp.address] = Function(imp.address,
-                                                       8 if self.is_64_bit() else 4,
+                                                       self.address_length(),
                                                        name,
                                                        self)
 

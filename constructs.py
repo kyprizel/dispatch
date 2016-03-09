@@ -91,11 +91,12 @@ class Instruction(object):
             elif self._executable.vaddr_is_executable(operand.imm):
                 func_addrs = self._executable.functions.keys()
                 func_addrs.sort(reverse=True)
-                for func_addr in func_addrs:
-                    if func_addr < operand.imm:
-                        break
-                diff = operand.imm - func_addr
-                op_strings[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
+                if func_addrs:
+                    for func_addr in func_addrs:
+                        if func_addr < operand.imm:
+                            break
+                    diff = operand.imm - func_addr
+                    op_strings[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
         else:
             for i, operand in enumerate(self.capstone_inst.operands):
                 if operand.type == CS_OP_IMM and operand.imm in self._executable.strings:

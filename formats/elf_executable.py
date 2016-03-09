@@ -5,7 +5,6 @@ import struct
 from base_executable import *
 from section import *
 
-
 INJECTION_SIZE = 0x1000
 
 E_HALF_SIZE = 2
@@ -46,6 +45,9 @@ class ELFExecutable(BaseExecutable):
         else:
             return None
 
+    def entry_point(self):
+        return self.helper['e_entry']
+
     def executable_segment_vaddr(self):
         return self.executable_segment['p_vaddr']
 
@@ -65,7 +67,11 @@ class ELFExecutable(BaseExecutable):
     def _extract_symbol_table(self):
         # Add in symbols from the PLT/rela.plt
         # .rela.plt contains indexes to reference both .dynsym (symbol names) and .plt (jumps to GOT)
-        reloc_section = self.helper.get_section_by_name('.rela.plt')
+        if self.is_64_bit():
+            reloc_section = self.helper.get_section_by_name('.rela.plt')
+        else:
+            reloc_section = self.helper.get_section_by_name('.rel.plt')
+
         if reloc_section:
             dynsym = self.helper.get_section(reloc_section['sh_link']) # .dynsym
             plt = self.helper.get_section_by_name('.plt')
