@@ -154,10 +154,13 @@ var instruction_clicked = function(e) {
 }
 
 var rename_function = function(e) {
-    if (current_view.selected_element != undefined && e.keyCode == 78) { // n
+    if (e.keyCode == 78 && // n
+        current_view.selected_element != undefined) {
         var name = current_view.selected_element.innerHTML;
         var new_name = prompt("Rename " + name + ":");
-        if (new_name != null) {
+        if (current_view.functions.indexOf(new_name) != -1) {
+            alert("Bad! Another function already has that name!");
+        } else if (new_name != null) {
             $.post('/rename/'+name+'/'+new_name, function(data) {
                 load_function_list(); // reload data
                 if (current_view.function_name == name) {
