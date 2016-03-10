@@ -126,9 +126,9 @@ var divide_instructions = function() {
     });
     var tspans = Array.from($('tspan'));
     tspans.forEach(function(tsp) {
-        //if (current_view.functions.indexOf(tsp.innerHTML) != -1) {
+        if (current_view.functions.indexOf(tsp.innerHTML) != -1) {
             tsp.addEventListener('click', instruction_clicked);
-        //}
+        }
     });
     
 }
