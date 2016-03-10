@@ -10,4 +10,3 @@ executable = read_executable(sys.argv[1])
 # Invoke the analyzer to find functions
 executable.analyze()
 
-executable.function_named('main').print_disassembly()

@@ -8,6 +8,12 @@ class X86_Analyzer(BaseAnalyzer):
     def _create_disassembler(self):
         self._disassembler = Cs(CS_ARCH_X86, CS_MODE_32)
 
+    def _gen_ins_map(self):
+        for section in self.executable.sections_to_disassemble():
+            for ins in self._disassembler.disasm(section.raw, section.vaddr):
+                if ins.id: # .byte "instructions" have an id of 0
+                    self.ins_map[ins.address] = Instruction(ins, self.executable)
+
     def ins_uses_address_register(self, instruction):
         for op in instruction.capstone_inst.operands:
             if op.type == CS_OP_REG and op.reg in (X86_REG_EIP, X86_REG_RIP, X86_REG_ESP, X86_REG_RSP):

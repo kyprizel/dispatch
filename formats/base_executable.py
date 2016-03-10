@@ -6,6 +6,8 @@ from analysis.arm_analyzer import *
 from analysis.mips_analyzer import *
 from analysis.x86_analyzer import *
 
+from enums import *
+
 class BaseExecutable(object):
     '''
     The executable classes expose the raw binary in higher-level chunks.
@@ -47,6 +49,19 @@ class BaseExecutable(object):
         '''
         return self.architecture in (ARCHITECTURE.X86_64, ARCHITECTURE.ARM_64) # TODO: MIPS
 
+    def address_length(self):
+        '''
+        :return: Number of bytes an address in this executable will have (i.e. 4 for 32 bit, 8 for 64 bit)
+        '''
+        return 8 if self.is_64_bit() else 4
+
+    def entry_point(self):
+        '''
+        Gets the entry point of the executable.
+        :return: The entry point of the executable.
+        '''
+        raise NotImplementedError()
+
     def iter_sections(self):
         '''
         Iterates through each section in the executable.
@@ -81,6 +96,13 @@ class BaseExecutable(object):
                 return True
 
         return False
+
+    def section_containing_vaddr(self, vaddr):
+        for section in self.iter_sections():
+            if section.contains_vaddr(vaddr):
+                return section
+
+        return None
 
     def function_containing_vaddr(self, vaddr):
         for f in self.iter_functions():
@@ -123,6 +145,17 @@ class BaseExecutable(object):
         :return: The raw bytes of the entire binary.
         '''
         return self.binary.getvalue()
+
+    def get_binary_vaddr_range(self, start, end):
+        '''
+        Gets the raw bytes from the binary within a virtual address range
+        :param start: Starting virtual address
+        :param end: Ending virtual address
+        :return: The bytes in the binary between the two virtual addresses
+        '''
+        start_offset = self.vaddr_binary_offset(start)
+        end_offset = self.vaddr_binary_offset(end)
+        return self.get_binary()[start_offset:end_offset]
     
     def analyze(self):
         '''
