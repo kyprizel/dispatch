@@ -2,7 +2,9 @@
 var current_view = {
     function_name: undefined,
     functions: undefined,
-    selected_element: undefined
+    selected_element: undefined,
+    graph_x: undefined,
+    graph_y: undefined
 }
 
 var setup = function() {
@@ -14,9 +16,12 @@ var setup = function() {
     document.getElementsByTagName('body')[0].addEventListener('keydown', sync);
     document.getElementsByTagName('body')[0].addEventListener('keydown', xrefs_button_event);
 
-    // Testing: autoload xrefs to json_node_get_kind
-    //load_xrefs_menu('json_node_get_kind');
+    document.getElementById('bbs').addEventListener('scroll', scroll_handle);
+
+    //setInterval(reload_data, 1000); // collaborative editing, still WIP
+
 }
+
 
 var load_function_list = function () {
     // Get the list of functions
@@ -169,6 +174,9 @@ var reload_data = function() {
     load_function_list();
     if (current_view.function_name != undefined) {
         load_function(current_view.function_name);
+        // Reload to the last position we were in
+        document.getElementById('bbs').scrollTop = current_view.graph_y;
+        document.getElementById('bbs').scrollLeft = current_view.graph_x;
     }
 }
 
@@ -231,6 +239,11 @@ var toggle_disass_style = function(e) {
         }
         display_graph = !display_graph;
     }
+}
+
+var scroll_handle = function(e) {
+    current_view.graph_y = e.target.scrollTop;
+    current_view.graph_x = e.target.scrollLeft;
 }
 
 document.addEventListener('DOMContentLoaded', setup);
