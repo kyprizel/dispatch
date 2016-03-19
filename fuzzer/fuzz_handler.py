@@ -1,17 +1,29 @@
-import sysv_ipc
-import os, struct, subprocess, glob, time
-from os import path
+"""Fuzz handler
+"""
 
-def ftok(path, i):
+import os
+from os import path
+import glob
+import time
+import struct
+import logging
+import subprocess
+
+import sysv_ipc
+
+logging.basicConfig(level=logging.DEBUG)
+
+def ftok(file_path, i):
+    """Implements ftok function
+    """
     i = ord(i)
-    st = os.stat(path)
-    return ((i & 0xff) << 24 | (st.st_dev & 0xff) << 16 | (st.st_ino & 0xffff));
+    file_stat = os.stat(file_path)
+    return (i & 0xff) << 24 | (file_stat.st_dev & 0xff) << 16 | (file_stat.st_ino & 0xffff)
 
 def radamsa(base_file, fuzzed_file):
+    """Calls out to radamsa to generate test case
+    """
     os.system("cat {0} | radamsa > {1}".format(base_file, fuzzed_file))
-
-def LOG(s):
-    print "[Log]", s
 
 shmem_path = "/tmp/shared_mem"
 touch = open(shmem_path, "w+").close()
@@ -90,7 +102,7 @@ def run_fuzz_case(fuzz_file, depth):
             new_file_path = path.join(unique_path_dir, path.basename(fuzz_file) + str(int(time.time())))
             cp(fuzz_file, new_file_path)
             unique_paths.insert(case_idx, (depth + 1, new_file_path, path_data_trimmed))
-            LOG("Added new case: " + new_file_path)
+            logging.debug("Added new case: " + new_file_path)
 
         memory.write("\x00" * 1024)
 
@@ -112,7 +124,7 @@ def fuzz_unique_paths():
     fuzz_idx = 0
     while True:
         fuzz_depth, fuzz_file, fuzz_path = unique_paths[fuzz_idx]
-        LOG("Fuzzing: " + fuzz_file)
+        logging.debug("Fuzzing: " + fuzz_file)
         if fuzz_depth > MAX_FUZZ_DEPTH:
             continue
         for gen_fuzz_file in gen_fuzz_cases(fuzz_file):
