@@ -36,15 +36,15 @@ target_argv = ["./patched_program", None]
 argv_replace_idx = 1
 fuzz_dir = "fuzz_tests/"
 if not os.path.exists(fuzz_dir):
-    os.makedirs(directory)
+    os.makedirs(fuzz_dir)
 
 unique_path_dir = "unique_paths/"
 if not os.path.exists(unique_path_dir):
-    os.makedirs(directory)
+    os.makedirs(unique_path_dir)
 
 queue = "queue/"
 if not os.path.exists(queue):
-    os.makedirs(directory)
+    os.makedirs(queue)
 
 read_from_stdin = False
 unique_paths = []
@@ -79,7 +79,8 @@ def run_fuzz_case(fuzz_file, depth):
                 stdin=subprocess.PIPE)
         exit(0)
     else:
-        os.waitpid(pid, os.WUNTRACED)
+        child_signal = os.waitpid(pid, os.WUNTRACED)
+        print 
 
         child_data = memory.read()
 
