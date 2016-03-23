@@ -82,7 +82,7 @@ class BaseAnalyzer(object):
         :param instruction: The instruction to test
         :return: Whether or not the given instruction could be replaced
         '''
-        return not (self.ins_redirects_flow(instruction) or self.ins_uses_address_register(instruction))
+        return not (self.ins_redirects_flow(instruction) or self.ins_uses_address_register(instruction) or self.ins_modifies_esp(instruction))
 
     def _identify_functions(self):
         '''

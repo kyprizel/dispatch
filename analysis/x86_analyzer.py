@@ -21,6 +21,10 @@ class X86_Analyzer(BaseAnalyzer):
 
         return False
 
+    def ins_modifies_esp(self, instruction):
+        return 'pop' in instruction.mnemonic or 'push' in instruction.mnemonic \
+                or instruction.capstone_inst.operands[0] in (X86_REG_ESP, X86_REG_RSP)
+
     def _identify_functions(self):
         STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0,1,2
 
