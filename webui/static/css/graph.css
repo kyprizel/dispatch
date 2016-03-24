@@ -20,6 +20,27 @@
     stroke-width: 3px;
 }
 
+tspan {
+    font-family: 'Roboto Mono';
+    font-size: 7pt;
+}
+
+.register {
+    fill: blue;
+}
+
+.delimiter {
+    fill: grey;
+}
+
+.instruction {
+    fill: red;
+}
+
+.comment {
+    fill: green;
+}
+
 #disas {
     background-color: #FFFFE0;
     height: 100%;
