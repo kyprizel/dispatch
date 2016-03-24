@@ -87,23 +87,26 @@ var layout_bbs = function(func) {
     });
 }
 
+var instruction_delimiters = ['[', ']','+','-','*',' ',','];
 var parse_instruction = function(insn) {
     var tokens = [];
     var curr_token = "";
+    var in_comment = false;
     Array.from(insn).forEach(function(c) {
-        switch (c) {
-        case '[':
-        case ']':
-        case ',':
-        case '+':
-        case ' ':
-            tokens.push(curr_token);
-            tokens.push(c);
-            curr_token = "";
-            break;
-        default:
+        if (!in_comment) {
+            if (instruction_delimiters.indexOf(c) != -1) {
+                tokens.push(curr_token);
+                tokens.push(c);
+                curr_token = "";
+            } else if (c == ';') {
+                in_comment = true;
+                tokens.push(curr_token);
+                curr_token = c;
+            } else {
+                curr_token += c;
+            }
+        } else {
             curr_token += c;
-            break;
         }
     });
     tokens.push(curr_token);
@@ -112,18 +115,56 @@ var parse_instruction = function(insn) {
 
 var divide_instructions = function() {
     var bbs = $('.node');
+    var register_names = [
+        // x86(_64) registers
+        'cs','ds','es','fs','gs','ss',                                                                               // segment registers
+        'cf pf af zf sf tf if df of iopl nt rf vm ac vif vip id',                                                    // EFLAGS
+        'ah','al','bh','bl','ch','cl','dh','dl','r8l','r9l','r10l','r11l','r12l','r13l','r14l','r15l',               // 8-bit registers
+        'ax','bx','cx','dx','di','si','bp','sp','ip','r8w','r9w','r10w','r11w','r12w','r13w','r14w','r15w',          // 16-bit registers
+        'eax','ebx','ecx','edx','edi','esi','ebp','esp','eip','r8d','r9d','r10d','r11d','r12d','r13d','r14d','r15d', // 32-bit registers
+        'rax','rbx','rcx','rdx','rdi','rsi','rbp','rsp','rip','r8','r9','r10','r11','r12','r13','r14','r15',         // 64-bit registers
+        // TODO: ARM, MIPS, etc.
+        ];
+    var instruction_names = [
+        // x86 (or some subset... TODO: literally every x86 instruction)
+        'aaa','aad','aam','aas','adc','add','and','call','cbw',
+        'clc','cld','cli','cmc','cmp','cmpsb','cmpsw','cwd',
+        'daa','das','dec','div','esc','hlt','idiv','imul',
+        'in','inc','int','into','iret','jle','jl','jge','jg','ja','jb', 'jbe',
+        'je','jne','jz','jnz','jcxz','jmp','lahf','lds','lea',
+        'les','lock','lodsb','lodsw','loop','mov','movsb','movsw', 'movsx','movzx',
+        'mul','neg','nop','not','or','out','pop','popf','push','pushf',
+        'rcl','rcr','ret','retn','retf','rol','ror','sahf','sal','sar',
+        'sbb','scasb','scasw','shl','shr','stc','std','sti','stosb',
+        'stosw','sub','test','wait','xchg','xlat','xor', 'syscall',
+        'repne',
+        // TODO: ARM, MIPS, etc.
+        ];
     bbs.each(function(i, bb) {
         var bb_addr = undefined; // address of the basic block's head
         Array.from(bb.children).forEach(function(insn_block) {
             var new_content = "";
-            // TODO: parse instructions more nicely to improve clickyness (and maybe add coloring?)
             var ss = parse_instruction(insn_block.innerHTML);
             if (insn_block.tagName.toLowerCase() == 'title') {
                 bb_addr = insn_block.innerHTML;
             } else {
                 for (var i = 0; i < ss.length; i++) {
                     var x = ss[i];
-                    new_content += "<tspan class=\""+bb_addr+"\">"+x+"</tspan>";
+                    var classes = [bb_addr];
+                    // find various attributes for syntax highlighting
+                    if (register_names.indexOf(x.toLowerCase()) != -1) {
+                        classes.push('register');
+                    }
+                    if (instruction_delimiters.indexOf(x.toLowerCase()) != -1) {
+                        classes.push('delimiter');
+                    }
+                    if (instruction_names.indexOf(x.toLowerCase()) != -1) {
+                        classes.push('instruction');
+                    }
+                    if (x[0] == ';') {
+                        classes.push('comment');
+                    }
+                    new_content += "<tspan class=\""+classes.join(" ")+"\">"+x+"</tspan>";
                 }
                 insn_block.innerHTML = new_content;
             }
