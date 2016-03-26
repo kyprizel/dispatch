@@ -74,7 +74,12 @@ def graph(function_name):
                     color = "red"
             elif edge.type == 2: # CFGEdge.SWITCH
                 color = "magenta"
-            G.add_edge(s.address, d.address, color=color)
+            # hacky way of making loops to the same basic block go bottom-to-top.
+            # Should be replaced if we can get ortho lines to support head/tail port options
+            direction = 'forward'
+            if s.address == d.address:
+                direction = 'back'
+            G.add_edge(s.address, d.address, color=color, dir=direction)
     
     dot = subprocess.Popen(['dot', '-Tsvg'], stdin=subprocess.PIPE, stdout=subprocess.PIPE)
     stdout, stderr = dot.communicate(str(G))
