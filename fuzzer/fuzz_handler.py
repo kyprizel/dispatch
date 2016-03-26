@@ -38,6 +38,14 @@ read_from_stdin = False
 unique_paths = []
 MAX_FUZZ_DEPTH = 5
 
+def cp(src, dst):
+    """
+    copy files yay
+    """
+    with open(src, 'r') as s:
+        with open(dst, 'w') as d:
+            d.write(r.read())
+
 def run_fuzz_case(fuzz_file, depth):
     global unique_paths, target_argv, argv_replace_idx
 
@@ -80,11 +88,12 @@ def run_fuzz_case(fuzz_file, depth):
 
         if add_case == True:
             new_file_path = path.join(unique_path_dir, path.basename(fuzz_file) + str(int(time.time())))
-            os.system("cp {0} {1}".format(fuzz_file, new_file_path))
+            cp(fuzz_file, new_file_path)
             unique_paths.insert(case_idx, (depth + 1, new_file_path, path_data_trimmed))
             LOG("Added new case: " + new_file_path)
 
         memory.write("\x00" * 1024)
+
 
 def gen_fuzz_cases(seed_file):
     for i in range(5):
@@ -116,7 +125,7 @@ def start_fuzzing():
 
     for n, f in enumerate(fuzz_files):
         new_name = path.join(queue, "input_case_{0}".format(n))
-        os.system("cp {0} {1}".format(f, new_name))
+        cp(f, new_name)
         run_fuzz_case(new_name, 0)
 
     fuzz_unique_paths()
