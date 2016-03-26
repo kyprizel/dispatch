@@ -1,4 +1,7 @@
 from elftools.elf.elffile import ELFFile
+from elftools.construct import Container
+from elftools.elf.enums import *
+from elftools.elf.constants import *
 import logging
 import struct
 
@@ -6,6 +9,8 @@ from base_executable import *
 from section import *
 
 INJECTION_SIZE = 0x1000
+
+INJECTION_SECTION_NAME = 'inject0'
 
 E_HALF_SIZE = 2
 E_WORD_SIZE = 4
@@ -26,8 +31,7 @@ class ELFExecutable(BaseExecutable):
             raise Exception('Architecture is not recognized')
 
         self.executable_segment = [s for s in self.helper.iter_segments() if s['p_type'] == 'PT_LOAD' and s['p_flags'] & 0x1][0]
-        self.section_to_inject = None
-        self.next_injection_offset = 0
+
         self.next_injection_vaddr = 0
 
     def _identify_arch(self):
@@ -140,113 +144,196 @@ class ELFExecutable(BaseExecutable):
         E_ADDR_SIZE = E_XWORD_SIZE
         E_OFFSET_SIZE = E_ADDR_SIZE
 
+        OFFSET_PACK_TYPE = 'I' if self.helper.elfclass == 32 else 'Q'
+
+        # TODO: 64 bit ELF differences
 
         modified = StringIO(self.binary.getvalue())
 
-        # Update e_shoff (elf section header offset)
-        e_shoff = self.helper['e_shoff'] + INJECTION_SIZE
-        logging.debug('Rewriting section header offset to {}'.format(e_shoff))
+        # Update number of section headers
+        e_shnum = self.helper['e_shnum']
+        e_shnum += 1
+        logging.debug('Changing number of section headers to {}'.format(e_shnum))
 
-        modified.seek(16 + E_HALF_SIZE + E_HALF_SIZE + E_WORD_SIZE + E_ADDR_SIZE + E_OFFSET_SIZE)
-        modified.write(struct.pack(self.pack_endianness + WORD_PACK_TYPE, e_shoff))
+        modified.seek((16 +            # e_ident
+                       E_HALF_SIZE +   # e_type
+                       E_HALF_SIZE +   # e_machine
+                       E_WORD_SIZE +   # e_version
+                       E_ADDR_SIZE +   # e_entry
+                       E_OFFSET_SIZE + # e_phoff
+                       E_OFFSET_SIZE + # e_shoff
+                       E_WORD_SIZE +   # e_flags
+                       E_HALF_SIZE +   # e_ehsize
+                       E_HALF_SIZE +   # e_phentsize
+                       E_HALF_SIZE +   # e_phnum
+                       E_HALF_SIZE))   # e_shentsize
+        modified.write(struct.pack(self.pack_endianness + 'H', e_shnum))
 
+        # Update size of section header string table to fit new section name
+        for i in range(self.helper.num_sections()):
+            section = self.helper.get_section(i)
+            if section.name == '.shstrtab':
+                section_hdr_offset = self.helper._section_offset(i)
 
-        # Update p_filesz and p_memsz for the executable segment, and also
-        # update p_offset for all program headers after the executable segment
-        executable_segment = None
-        for segment_idx, segment in enumerate(self.helper.iter_segments()):
-            segment_header_offset = self.helper._segment_offset(segment_idx)
+                shstrtab_size = section['sh_size']
+                shstrtab_size += len(INJECTION_SECTION_NAME) + 1
 
-            if executable_segment is not None:
-                # Already past the executable segment, so just update the offset
-                modified.seek(segment_header_offset + E_WORD_SIZE)
-
-                # ELF64 has an additional p_flags word
-                if self.helper.elfclass == 64:
-                    modified.seek(E_WORD_SIZE, 1)
-
-                modified.write(struct.pack(self.pack_endianness + self.address_pack_type, segment['p_offset'] + INJECTION_SIZE))
-
-            if segment['p_type'] == 'PT_LOAD' and segment['p_flags'] & 0x1: # Segment is a LOAD segment and is executable
-                logging.debug('Found executable LOAD segment at index {}'.format(segment_idx))
-                executable_segment = segment
-
-                seg_filesz = segment['p_filesz'] + INJECTION_SIZE
-                seg_memsz = segment['p_memsz'] + INJECTION_SIZE
-                logging.debug('Rewriting segment filesize and memsize to {} and {}'.format(seg_filesz, seg_memsz))
-
-
-                modified.seek(segment_header_offset + E_WORD_SIZE + E_OFFSET_SIZE + E_ADDR_SIZE + E_ADDR_SIZE)
-
-                # Again, account for the p_flags word
-                if self.helper.elfclass == 64:
-                    modified.seek(E_WORD_SIZE, 1)
-
-                modified.write(struct.pack(self.pack_endianness + (self.address_pack_type*2), seg_filesz, seg_memsz))
+                modified.seek((section_hdr_offset +
+                               E_WORD_SIZE + # sh_name
+                               E_WORD_SIZE + # sh_type
+                               E_WORD_SIZE + # sh_flags
+                               E_ADDR_SIZE + # sh_addr
+                               E_OFFSET_SIZE)) # sh_offset
+                modified.write(struct.pack(self.pack_endianness + WORD_PACK_TYPE, shstrtab_size))
 
 
-        if executable_segment is None:
-            logging.error("Could not locate an executable LOAD segment. Cannot continue injection.")
-            return False
+        # Some constants that will be used to determine if offsets need to be adjusted:
 
-        last_exec_section_idx = max([idx for idx in range(self.helper.num_sections()) if executable_segment.section_in_segment(self.helper.get_section(idx))])
-        last_exec_section = self.helper.get_section(last_exec_section_idx)
+        # End offset of section headers (i.e. where we'll inject our new section header)
+        sec_hdr_end = self.helper['e_shoff'] + self.helper['e_shentsize'] * self.helper['e_shnum']
 
-        logging.debug('Last section in executable LOAD segment is at index {} ({})'.format(last_exec_section_idx, last_exec_section.name))
-
-
-        # Update sh_size for the section we grew
-        section_header_offset = self.helper._section_offset(last_exec_section_idx)
-        modified.seek(section_header_offset + E_WORD_SIZE + E_WORD_SIZE + E_XWORD_SIZE + E_ADDR_SIZE + E_OFFSET_SIZE)
-        modified.write(struct.pack(self.pack_endianness + self.address_pack_type, last_exec_section['sh_size'] + INJECTION_SIZE))
+        # End of the section header string table (i.e. where we'll inject our new section header's name)
+        shstrtab_end = self.helper.get_section_by_name('.shstrtab')['sh_offset'] + self.helper.get_section_by_name('.shstrtab')['sh_size']
 
 
-        # Update sh_offset for each section past the last section in the executable segment
-        for section_idx in range(last_exec_section_idx + 1, self.helper.num_sections()):
-            section_header_offset = self.helper._section_offset(section_idx)
-            section = self.helper.get_section(section_idx)
 
-            sec_offset = section['sh_offset'] + INJECTION_SIZE
-            logging.debug('Rewriting section {} ({}) offset to {}'.format(section_idx, section.name, sec_offset))
+        # Change program header offset if necessary
+        e_phoff = self.helper['e_phoff']
+        if e_phoff >= sec_hdr_end:
+            e_phoff += self.helper['e_shentsize'] # Make room for a new section header
 
-            modified.seek(section_header_offset + E_WORD_SIZE + E_WORD_SIZE + E_XWORD_SIZE + E_ADDR_SIZE)
-            modified.write(struct.pack(self.pack_endianness + self.address_pack_type, sec_offset))
+            if self.helper['e_phoff'] >= shstrtab_end:
+                e_phoff += len(INJECTION_SECTION_NAME) + 1 # Also make room for section name and null byte
 
-        self.section_to_inject = last_exec_section
+            logging.debug('Changing program header offset to {}'.format(e_phoff))
+
+            modified.seek((16 +          # e_ident
+                           E_HALF_SIZE + # e_type
+                           E_HALF_SIZE + # e_machine
+                           E_WORD_SIZE + # e_version
+                           E_ADDR_SIZE)) # e_entry
+            modified.write(struct.pack(self.pack_endianness + OFFSET_PACK_TYPE, e_phoff))
+
+
+        # Adjust offsets for any sections after the section header we're about to add
+        for i in range(self.helper.num_sections()):
+            section = self.helper.get_section(i)
+            if section['sh_offset'] >= sec_hdr_end:
+                section_hdr_offset = self.helper._section_offset(i)
+
+                sh_offset = section['sh_offset'] + self.helper['e_shentsize']
+
+                if section['sh_offset'] >= shstrtab_end:
+                    sh_offset += len(INJECTION_SECTION_NAME) + 1
+
+                logging.debug('Adjusting section {}\'s offset to {}'.format(i, sh_offset))
+
+                modified.seek((section_hdr_offset +
+                               E_WORD_SIZE + # sh_name
+                               E_WORD_SIZE + # sh_type
+                               E_WORD_SIZE + # sh_flags
+                               E_ADDR_SIZE)) # sh_addr
+
+                modified.write(struct.pack(self.pack_endianness + OFFSET_PACK_TYPE, sh_offset))
+
+        # Adjust offsets for any segments after the section header we're about to add
+        for i in range(self.helper.num_segments()):
+            segment = self.helper.get_segment(i)
+            if segment['p_offset'] >= sec_hdr_end:
+                segment_hdr_offset = self.helper._segment_offset(i)
+
+                p_offset = segment['p_offset'] + self.helper['e_shentsize']
+
+                if segment['p_offset'] >= shstrtab_end:
+                    p_offset += len(INJECTION_SECTION_NAME) + 1
+
+                logging.debug('Adjusting segment {}\'s offset to {}'.format(i, p_offset))
+
+                modified.seek(segment_hdr_offset + E_WORD_SIZE)
+
+                modified.write(struct.pack(self.pack_endianness + OFFSET_PACK_TYPE, p_offset))
+
+        if shstrtab_end > sec_hdr_end:
+            # Section header string table comes after the section headers themselves (seems to be non-standard)
+            shstrtab_end += self.helper['e_shentsize'] # Account for the section we will splice in
+        else:
+            # Section header string table comes before the section headers (seems to be standard)
+            # Update e_shoff taking into account the string that we're going to insert
+            e_shoff = self.helper['e_shoff']
+            e_shoff += len(INJECTION_SECTION_NAME) + 1
+
+            modified.seek((16 +            # e_ident
+                           E_HALF_SIZE +   # e_type
+                           E_HALF_SIZE +   # e_machine
+                           E_WORD_SIZE +   # e_version
+                           E_ADDR_SIZE +   # e_entry
+                           E_OFFSET_SIZE)) # e_phoff
+            modified.write(struct.pack(self.pack_endianness + OFFSET_PACK_TYPE, e_shoff))
+
+        # Splice in the actual section header
+        hdr = self.helper.structs.Elf_Shdr.build(Container(sh_name=self.helper.get_section_by_name('.shstrtab')['sh_size'],
+                                                           sh_type=ENUM_SH_TYPE['SHT_PROGBITS'],
+                                                           sh_flags=SH_FLAGS.SHF_ALLOC | SH_FLAGS.SHF_EXECINSTR,
+                                                           sh_addr=0x700000,
+                                                           sh_offset=len(self.get_binary()) + self.helper['e_shentsize'] + len(INJECTION_SECTION_NAME) + 1,
+                                                           sh_size=0,
+                                                           sh_link=0,
+                                                           sh_info=0,
+                                                           sh_addralign=0,
+                                                           sh_entsize=0))
+
+        logging.debug('Adding in new section header at offset {}'.format(sec_hdr_end))
+        modified = StringIO(modified.getvalue()[:sec_hdr_end] + hdr + modified.getvalue()[sec_hdr_end:])
+
+        # Add section name to shstrtab
+        logging.debug('Adding section header string table entry at offset {}'.format(shstrtab_end))
+        modified = StringIO(modified.getvalue()[:shstrtab_end] + INJECTION_SECTION_NAME + '\x00' + modified.getvalue()[shstrtab_end:])
 
         self.binary = modified
-
-        return True
+        self.helper = ELFFile(self.binary)
 
     def inject(self, asm, update_entry=False):
-        if self.section_to_inject is None:
-            if not self._prepare_for_injection():
-                logging.error("Failed to prepare the binary for asm injection.")
-                return
-            else:
-                self.next_injection_offset = self.section_to_inject['sh_offset'] + self.section_to_inject['sh_size']
-                self.next_injection_vaddr = self.section_to_inject['sh_addr'] + self.section_to_inject['sh_size']
+        E_XWORD_SIZE = 4 if self.helper.elfclass == 32 else 8
+        E_ADDR_SIZE = E_XWORD_SIZE
+        E_OFFSET_SIZE = E_ADDR_SIZE
 
-                self.binary = StringIO(self.binary.getvalue()[:self.next_injection_offset] + \
-                                       '\x00'*INJECTION_SIZE + \
-                                       self.binary.getvalue()[self.next_injection_offset:])
+        if self.helper.get_section_by_name(INJECTION_SECTION_NAME) is None:
+            self._prepare_for_injection()
 
-        self.binary.seek(self.next_injection_offset)
+        section_idx = [i for i in range(self.helper.num_sections()) if self.helper.get_section(i).name == INJECTION_SECTION_NAME][0]
+
+        section_hdr_offset = self.helper._section_offset(section_idx)
+
+        section_to_inject = self.helper.get_section(section_idx)
+
+        # Update the section's size
+        sh_size = section_to_inject['sh_size']
+        sh_size += len(asm)
+        self.binary.seek((section_hdr_offset +
+                          E_WORD_SIZE + # sh_name
+                          E_WORD_SIZE + # sh_type
+                          E_WORD_SIZE + # sh_flags
+                          E_ADDR_SIZE + # sh_addr
+                          E_OFFSET_SIZE)) # sh_offset
+
+        self.binary.write(struct.pack(self.pack_endianness + WORD_PACK_TYPE, sh_size))
+
+        injection_vaddr = section_to_inject['sh_addr'] + section_to_inject['sh_size']
+
+        # Write the new asm to the end of the file (i.e. the end of the inject section)
+        self.binary.seek(0, 2)
         self.binary.write(asm)
 
         if update_entry:
-            logging.debug('Rewriting ELF entry address to {}'.format(self.next_injection_vaddr))
+            logging.debug('Rewriting ELF entry address to {}'.format(injection_vaddr))
             self.binary.seek(16 + E_HALF_SIZE + E_HALF_SIZE + E_WORD_SIZE)
-            self.binary.write(struct.pack(self.pack_endianness + self.address_pack_type, self.next_injection_vaddr))
+            self.binary.write(struct.pack(self.pack_endianness + self.address_pack_type, injection_vaddr))
 
         self.helper = ELFFile(self.binary)
 
-        insert_vaddr = self.next_injection_vaddr
+        self.next_injection_vaddr = injection_vaddr + len(asm)
 
-        self.next_injection_offset += len(asm)
-        self.next_injection_vaddr += len(asm)
-
-        return insert_vaddr
+        return injection_vaddr
 
     def replace_instruction(self, old_ins, new_asm):
         if len(new_asm) > old_ins.size:
