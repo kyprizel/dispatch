@@ -1,3 +1,5 @@
+import subprocess
+import logging
 from capstone import *
 
 class Function(object):
@@ -30,6 +32,18 @@ class Function(object):
     def print_disassembly(self):
         for i in self.instructions:
             print hex(i.address) + ' ' + str(i)
+
+    def demangle(self):
+        if self.name.startswith('_Z'):
+            p = subprocess.Popen(['c++filt', '-n', self.name], stdout=subprocess.PIPE)
+            demangled, _ = p.communicate()
+            return demangled.replace('\n','')
+        elif self.name.startswith('@'):
+            # TODO: MSVC demangling (look at wine debugger source)
+            return self.name
+        else:
+            logging.debug('Call to demangle with a non-reserved function name')
+
 
 
 class BasicBlock(object):
@@ -105,6 +119,7 @@ class Instruction(object):
                     self.comment = referenced_string.string
 
         return ', '.join(op_strings)
+
 
 class String(object):
     def __init__(self, string, vaddr, executable):

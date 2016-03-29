@@ -11,6 +11,7 @@ class PEExecutable(BaseExecutable):
         self.helper = pefile.PE(self.fp)
         
         self.architecture = self._identify_arch()
+        self.pack_endianness = '<'
 
         if self.architecture is None:
             raise Exception('Architecture is not recognized')
@@ -89,4 +90,4 @@ class PEExecutable(BaseExecutable):
             raise ValueError('Length of new assembly must be <= size of old instruction')
 
         self.helper.set_bytes_at_rva(old_ins.address - self.helper.OPTIONAL_HEADER.ImageBase,
-                                     new_asm + '\x90' * (old_ins.size - len(new_asm)))
+                                     str(new_asm) + '\x90' * (old_ins.size - len(new_asm)))
