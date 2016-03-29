@@ -9,3 +9,5 @@ executable = read_executable(sys.argv[1])
 
 # Invoke the analyzer to find functions
 executable.analyze()
+
+executable.functions[4294974093].print_disassembly()

@@ -1,3 +1,4 @@
+from capstone import *
 from capstone.x86_const import *
 import struct
 
@@ -12,18 +13,11 @@ class X86_Analyzer(BaseAnalyzer):
         for section in self.executable.sections_to_disassemble():
             for ins in self._disassembler.disasm(section.raw, section.vaddr):
                 if ins.id: # .byte "instructions" have an id of 0
-                    self.ins_map[ins.address] = Instruction(ins, self.executable)
-
-    def ins_uses_address_register(self, instruction):
-        for op in instruction.capstone_inst.operands:
-            if op.type == CS_OP_REG and op.reg in (X86_REG_EIP, X86_REG_RIP, X86_REG_ESP, X86_REG_RSP):
-                return True
-
-        return False
+                    self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
 
     def ins_modifies_esp(self, instruction):
         return 'pop' in instruction.mnemonic or 'push' in instruction.mnemonic \
-                or instruction.capstone_inst.operands[0] in (X86_REG_ESP, X86_REG_RSP)
+                or instruction.operands[0] in SP_REGS[self.executable.architecture]
 
     def _identify_functions(self):
         STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0,1,2
@@ -39,27 +33,27 @@ class X86_Analyzer(BaseAnalyzer):
             # for this case to make sure the function we detect starts at the correct address.
             #  https://blogs.msdn.microsoft.com/oldnewthing/20110921-00/?p=9583
             if state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'mov' and \
-                    cur_ins.capstone_inst.operands[0].type == CS_OP_REG and \
-                    cur_ins.capstone_inst.operands[0].reg == X86_REG_EDI and \
-                    cur_ins.capstone_inst.operands[1].type == CS_OP_REG and \
-                    cur_ins.capstone_inst.operands[1].reg == X86_REG_EDI:
+                    cur_ins.operands[0].type == Operand.REG and \
+                    cur_ins.operands[0].reg == X86_REG_EDI and \
+                    cur_ins.operands[1].type == Operand.REG and \
+                    cur_ins.operands[1].reg == X86_REG_EDI:
 
                 state = STATE_IN_PROLOGUE
                 ops.append(cur_ins)
 
             elif state in (STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE) and cur_ins.mnemonic == 'push' and \
-                    cur_ins.capstone_inst.operands[0].type == CS_OP_REG and \
-                    cur_ins.capstone_inst.operands[0].reg in (X86_REG_EBP, X86_REG_RBP):
+                    cur_ins.operands[0].type == Operand.REG and \
+                    cur_ins.operands[0].reg in (X86_REG_EBP, X86_REG_RBP):
 
                 state = STATE_IN_PROLOGUE
                 ops.append(cur_ins)
 
             elif state == STATE_IN_PROLOGUE and \
                             cur_ins.mnemonic == 'mov' and \
-                            cur_ins.capstone_inst.operands[0].type == CS_OP_REG and \
-                            cur_ins.capstone_inst.operands[0].reg in (X86_REG_EBP, X86_REG_RBP) and \
-                            cur_ins.capstone_inst.operands[1].type == CS_OP_REG and \
-                            cur_ins.capstone_inst.operands[1].reg in (X86_REG_ESP, X86_REG_RSP):
+                            cur_ins.operands[0].type == Operand.REG and \
+                            cur_ins.operands[0].reg in (X86_REG_EBP, X86_REG_RBP) and \
+                            cur_ins.operands[1].type == Operand.REG and \
+                            cur_ins.operands[1].reg in SP_REGS[self.executable.architecture]:
 
                 state = STATE_IN_FUNCTION
                 ops.append(cur_ins)
@@ -87,8 +81,8 @@ class X86_Analyzer(BaseAnalyzer):
         for f in self.executable.iter_functions():
             if f.type == Function.NORMAL_FUNC:
                 for ins in f.instructions:
-                    if CS_GRP_CALL in ins.capstone_inst.groups:
-                        call_addr = ins.capstone_inst.operands[-1].imm
+                    if ins.is_call():
+                        call_addr = ins.operands[-1].imm
                         if self.executable.vaddr_is_executable(call_addr):
                             edge = CFGEdge(ins.address, call_addr, CFGEdge.DEFAULT)
                             edges.add(edge)
@@ -96,9 +90,9 @@ class X86_Analyzer(BaseAnalyzer):
                 for cur_bb in f.bbs:
                     last_ins = cur_bb.instructions[-1]
 
-                    if CS_GRP_JUMP in last_ins.capstone_inst.groups:
-                        if last_ins.capstone_inst.operands[-1].type == CS_OP_IMM:
-                            jmp_addr = last_ins.capstone_inst.operands[-1].imm
+                    if last_ins.is_jump():
+                        if last_ins.operands[-1].type == Operand.IMM:
+                            jmp_addr = last_ins.operands[-1].imm
 
                             if self.executable.vaddr_is_executable(jmp_addr):
                                 if last_ins.mnemonic == 'jmp':
@@ -131,17 +125,17 @@ class X86_Analyzer(BaseAnalyzer):
                 ins_sets = [f.instructions[i:i + 5] for i in range(len(f.instructions) - 4)]
                 for instructions in ins_sets:
                     if instructions[0].mnemonic == 'cmp' and \
-                        CS_GRP_JUMP in instructions[1].groups and instructions[1].mnemonic != 'jmp' and \
+                        instructions[1].is_jump() and instructions[1].mnemonic != 'jmp' and \
                         instructions[3].mnemonic == 'mov' and\
-                            instructions[3].capstone_inst.operands[0].type == CS_OP_REG and \
-                            instructions[3].capstone_inst.operands[1].type == CS_OP_MEM and \
+                            instructions[3].operands[0].type == Operand.REG and \
+                            instructions[3].operands[1].type == Operand.MEM and \
                         instructions[4].mnemonic == 'jmp' and \
-                            instructions[4].capstone_inst.operands[0].type == CS_OP_REG and \
-                            instructions[4].capstone_inst.operands[0].reg ==  instructions[3].capstone_inst.operands[0].reg:
+                            instructions[4].operands[0].type == Operand.REG and \
+                            instructions[4].operands[0].reg ==  instructions[3].operands[0].reg:
 
-                        num_cases = instructions[0].capstone_inst.operands[1].imm
-                        addr_size = instructions[3].capstone_inst.operands[1].mem.scale
-                        jmp_table_offset = instructions[3].capstone_inst.operands[1].mem.disp
+                        num_cases = instructions[0].operands[1].imm
+                        addr_size = instructions[3].operands[1].scale
+                        jmp_table_offset = instructions[3].operands[1].disp
 
                         self.executable.binary.seek(self.executable.vaddr_binary_offset(jmp_table_offset))
                         table = self.executable.binary.read(num_cases*addr_size)

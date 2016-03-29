@@ -134,7 +134,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
             for ins in self._disassembler.disasm(code, bb_start):
                 if ins.id: # .byte "instructions" have an id of 0
-                    self.ins_map[ins.address] = Instruction(ins, self.executable)
+                    self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
         
 
 class ARM_64_Analyzer(ARM_Analyzer):
