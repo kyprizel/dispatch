@@ -1,18 +1,27 @@
+import capstone
 from capstone import *
 from capstone.arm_const import *
 from Queue import Queue
-import logging
 import struct
 
 from constructs import *
 from base_analyzer import BaseAnalyzer
 
 class ARM_Analyzer(BaseAnalyzer):
-    def _create_disassembler(self):
+    def __init__(self, executable):
+        super(ARM_Analyzer, self).__init__(executable)
+
         if self.executable.entry_point() & 0x1:
             self._disassembler = Cs(CS_ARCH_ARM, CS_MODE_THUMB)
         else:
             self._disassembler = Cs(CS_ARCH_ARM, CS_MODE_ARM)
+
+        self._disassembler.detail = True
+        self._disassembler.skipdata = True
+
+        self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.arm_const.__dict__.iteritems() if k.startswith('ARM_REG')])
+        self.IP_REGS = [11]
+        self.SP_REGS = [12]
 
     def _gen_ins_map(self):
         # Again, since ARM binaries can have code using both instruction sets, we basically have to make a CFG and
@@ -138,8 +147,17 @@ class ARM_Analyzer(BaseAnalyzer):
         
 
 class ARM_64_Analyzer(ARM_Analyzer):
-    def _create_disassembler(self):
+    def __init__(self, executable):
+        super(ARM_64_Analyzer, self).__init__(executable)
+
         if self.executable.entry_point() & 0x1:
             self._disassembler = Cs(CS_ARCH_ARM64, CS_MODE_THUMB)
         else:
             self._disassembler = Cs(CS_ARCH_ARM64, CS_MODE_ARM)
+
+        self._disassembler.detail = True
+        self._disassembler.skipdata = True
+
+        self.REGISTER_NAMES = dict([(v,k[10:].lower()) for k,v in capstone.arm64_const.__dict__.iteritems() if k.startswith('ARM64_REG')])
+        self.IP_REGS = []
+        self.SP_REGS = [4, 5]
