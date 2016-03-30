@@ -6,8 +6,16 @@ from constructs import *
 from base_analyzer import BaseAnalyzer
 
 class X86_Analyzer(BaseAnalyzer):
-    def _create_disassembler(self):
+    def __init__(self, executable):
+        super(X86_Analyzer, self).__init__(executable)
+
         self._disassembler = Cs(CS_ARCH_X86, CS_MODE_32)
+        self._disassembler.detail = True
+        self._disassembler.skipdata = True
+
+        self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.x86_const.__dict__.iteritems() if k.startswith('X86_REG')])
+        self.IP_REGS = [26, 34, 41]
+        self.SP_REGS = [30, 44, 47]
 
     def _gen_ins_map(self):
         for section in self.executable.sections_to_disassemble():
@@ -17,7 +25,7 @@ class X86_Analyzer(BaseAnalyzer):
 
     def ins_modifies_esp(self, instruction):
         return 'pop' in instruction.mnemonic or 'push' in instruction.mnemonic \
-                or instruction.operands[0] in SP_REGS[self.executable.architecture]
+                or instruction.operands[0] in self.SP_REGS
 
     def _identify_functions(self):
         STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0,1,2
@@ -53,7 +61,7 @@ class X86_Analyzer(BaseAnalyzer):
                             cur_ins.operands[0].type == Operand.REG and \
                             cur_ins.operands[0].reg in (X86_REG_EBP, X86_REG_RBP) and \
                             cur_ins.operands[1].type == Operand.REG and \
-                            cur_ins.operands[1].reg in SP_REGS[self.executable.architecture]:
+                            cur_ins.operands[1].reg in self.SP_REGS:
 
                 state = STATE_IN_FUNCTION
                 ops.append(cur_ins)
@@ -150,5 +158,9 @@ class X86_Analyzer(BaseAnalyzer):
         return edges
 
 class X86_64_Analyzer(X86_Analyzer):
-    def _create_disassembler(self):
+    def __init__(self, executable):
+        super(X86_64_Analyzer, self).__init__(executable)
+
         self._disassembler = Cs(CS_ARCH_X86, CS_MODE_64)
+        self._disassembler.detail = True
+        self._disassembler.skipdata = True

@@ -109,17 +109,19 @@ class Instruction(object):
         if self.is_call() or self.is_jump():
             # jump/call destination will always be the last operand (even with conditional ARM branch instructions)
             operand = self.operands[-1]
-            if operand.imm in self._executable.functions:
-                op_strings[-1] = self._executable.functions[operand.imm].name
-            elif self._executable.vaddr_is_executable(operand.imm):
-                func_addrs = self._executable.functions.keys()
-                func_addrs.sort(reverse=True)
-                if func_addrs:
-                    for func_addr in func_addrs:
-                        if func_addr < operand.imm:
-                            break
-                    diff = operand.imm - func_addr
-                    op_strings[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
+            # TODO: Don't only do this when we've got an IMM operation
+            if operand.type == Operand.IMM:
+                if operand.imm in self._executable.functions:
+                    op_strings[-1] = self._executable.functions[operand.imm].name
+                elif self._executable.vaddr_is_executable(operand.imm):
+                    func_addrs = self._executable.functions.keys()
+                    func_addrs.sort(reverse=True)
+                    if func_addrs:
+                        for func_addr in func_addrs:
+                            if func_addr < operand.imm:
+                                break
+                        diff = operand.imm - func_addr
+                        op_strings[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
         else:
             for i, operand in enumerate(self.operands):
                 if operand.type == Operand.IMM and operand.imm in self._executable.strings:
@@ -154,7 +156,7 @@ class Operand(object):
 
     def _get_simplified(self):
         # Auto-simplify ip-relative operands to their actual address
-        if self.type == Operand.MEM and self.base in IP_REGS[self._instruction._executable.architecture] and self.index == 0:
+        if self.type == Operand.MEM and self.base in self._instruction._executable.analyzer.IP_REGS and self.index == 0:
             addr = self._instruction.address + self._instruction.size + self.index * self.scale + self.disp
             return Operand(Operand.MEM, self._instruction, disp=addr)
 
@@ -166,7 +168,7 @@ class Operand(object):
         elif self.type == Operand.FP:
             return str(self.fp)
         elif self.type == Operand.REG:
-            return REGISTER_NAMES[self._instruction._executable.architecture][self.reg]
+            return self._instruction._executable.analyzer.REG_NAMES[self.reg]
         elif self.type == Operand.MEM:
             simplified = self._get_simplified()
 
@@ -174,13 +176,13 @@ class Operand(object):
 
             show_plus = False
             if simplified.base:
-                s += REGISTER_NAMES[simplified._instruction._executable.architecture][simplified.base]
+                s += self._instruction._executable.analyzer.REG_NAMES[simplified.base]
                 show_plus = True
             if simplified.index:
                 if show_plus:
                     s += ' + '
 
-                s += REGISTER_NAMES[simplified._instruction._executable.architecture][simplified.index]
+                s += self._instruction._executable.analyzer.REG_NAMES[simplified.index]
                 if simplified.scale > 1:
                     s += '*'
                     s += str(simplified.scale)
@@ -194,28 +196,6 @@ class Operand(object):
             s += ']'
 
             return s
-
-# I'm lazy :P
-REGISTER_NAMES = {
-    ARCHITECTURE.X86: dict([(v,k[8:].lower()) for k,v in capstone.x86_const.__dict__.iteritems() if k.startswith('X86_REG')]),
-    ARCHITECTURE.X86_64: dict([(v,k[8:].lower()) for k,v in capstone.x86_const.__dict__.iteritems() if k.startswith('X86_REG')]),
-    ARCHITECTURE.ARM: dict([(v,k[8:].lower()) for k,v in capstone.arm_const.__dict__.iteritems() if k.startswith('ARM_REG')]),
-    ARCHITECTURE.ARM_64: dict([(v,k[10:].lower()) for k,v in capstone.arm64_const.__dict__.iteritems() if k.startswith('ARM64_REG')])
-}
-
-IP_REGS = {
-    ARCHITECTURE.X86: [26, 34, 41],
-    ARCHITECTURE.X86_64: [26, 34, 41],
-    ARCHITECTURE.ARM: [11],
-    ARCHITECTURE.ARM_64: [],
-}
-
-SP_REGS = {
-    ARCHITECTURE.X86: [30, 44, 47],
-    ARCHITECTURE.X86_64: [30, 44, 47],
-    ARCHITECTURE.ARM: [12],
-    ARCHITECTURE.ARM_64: [4, 5],
-}
 
 def operand_from_cs_op(csOp, instruction):
     if csOp.type == capstone.CS_OP_IMM:
@@ -242,6 +222,7 @@ def instruction_from_cs_insn(csInsn, executable):
 
     return instruction
 
+
 class String(object):
     def __init__(self, string, vaddr, executable):
         self.string = string
@@ -254,6 +235,7 @@ class String(object):
 
     def __str__(self):
         return self.string
+
 
 class CFGEdge(object):
     # Edge with no special information. Could be from a default fall-through, unconditional jump, etc.

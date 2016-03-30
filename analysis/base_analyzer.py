@@ -1,4 +1,3 @@
-from capstone import *
 import logging
 import re
 from collections import OrderedDict
@@ -19,10 +18,6 @@ class BaseAnalyzer(object):
         # Dictionary of vaddr: instruction for quick lookups.
         # We use an OrderedDict so we can just `for addr in ins_map` and not have to worry about sorting
         self.ins_map = OrderedDict()
-
-        self._create_disassembler()
-        self._disassembler.detail = True
-        self._disassembler.skipdata = True
     
     def __repr__(self):
         return '<{} for {} {} \'{}\'>'.format(self.__class__.__name__,
@@ -60,8 +55,7 @@ class BaseAnalyzer(object):
         :return: Whether or not the given instruction references a register sensitive to location
         '''
         for op in instruction.operands:
-            if op.type == Operand.REG and (op.reg in IP_REGS[self.executable.architecture] or \
-                                           op.reg in SP_REGS[self.executable.architecture]):
+            if op.type == Operand.REG and (op.reg in self.IP_REGS or op.reg in self.SP_REGS):
                 return True
 
         return False
