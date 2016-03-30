@@ -17,7 +17,7 @@ class MachOExecutable(BaseExecutable):
         if self.architecture is None:
             raise Exception('Architecture is not recognized')
 
-        self.executable_segment = [s for s in self.helper.segments if s.initprot & 0x4]
+        self.executable_segment = [s for s in self.helper.segments if s.initprot & 0x4][0]
     
     def _identify_arch(self):
         machine = self.helper.header.display_cputype()
@@ -44,29 +44,31 @@ class MachOExecutable(BaseExecutable):
 
         for cmd in self.helper.commands:
             # NOTE: Is it safe to assume to the symtab command always comes before the dysymtab command?
-            if isinstance(cmd, pymacho.MachOSymtabCommand):
+            if isinstance(cmd, pymacho.MachOSymtabCommand.MachOSymtabCommand):
                 for i in range(len(cmd.syms)):
                     symbol = cmd.syms[i]
 
-                    self.file_handle.seek(cmd.stroff)
-                    symbol_strings = self.file_handle.read(cmd.strsize)
+                    self.binary.seek(cmd.stroff)
+                    symbol_strings = self.binary.read(cmd.strsize)
 
                     is_ext = symbol.n_type & 0x1 and symbol.n_value == 0
 
                     symbol_name = symbol_strings[symbol.n_strx:].split('\x00')[0]
 
-                    if not is_ext:
-                        self.functions[symbol.n_value] = symbol_name
+                    # Ignore Apple's hack for radar bug 5614542
+                    if not is_ext and symbol_name != 'radr://5614542':
+                        f = Function(symbol.n_value, 0, symbol_name, self)
+                        self.functions[symbol.n_value] = f
 
                     ordered_symbols.append(symbol_name)
 
-            if isinstance(cmd, pymacho.MachODYSymtabCommand):
-                self.file_handle.seek(cmd.indirectsymoff)
-                indirect_symbols = self.file_handle.read(cmd.nindirectsyms*4)
+            if isinstance(cmd, pymacho.MachODYSymtabCommand.MachODYSymtabCommand):
+                self.binary.seek(cmd.indirectsymoff)
+                indirect_symbols = self.binary.read(cmd.nindirectsyms*4)
 
                 sym_offsets = struct.unpack('<' + 'I'*cmd.nindirectsyms, indirect_symbols)
 
-                for section in self.get_text_segment().sections:
+                for section in self.executable_segment.sections:
                     if section.flags & pymacho.Constants.S_NON_LAZY_SYMBOL_POINTERS \
                         or section.flags & pymacho.Constants.S_LAZY_SYMBOL_POINTERS \
                         or section.flags & pymacho.Constants.S_SYMBOL_STUBS:
@@ -79,8 +81,16 @@ class MachOExecutable(BaseExecutable):
                         count = section.size / stride
 
                         for i in range(count):
-                            addr = self.get_text_segment().vmaddr + section.offset + (i * stride)
-                            self.functions[addr] = ordered_symbols[sym_offsets[i + section.reserved1]]
+                            addr = self.executable_segment.vmaddr + section.offset + (i * stride)
+                            symbol_name = ordered_symbols[sym_offsets[i + section.reserved1]]
+                            f = Function(addr, stride, symbol_name, self, type=Function.DYNAMIC_FUNC)
+                            self.functions[addr] = f
+
+    def iter_string_sections(self):
+        STRING_SECTIONS = ['__const', '__cstring', '__objc_methname', '__objc_classname']
+        for s in self.iter_sections():
+            if s.name in STRING_SECTIONS:
+                yield s
 
     def inject(self, asm, update_entry=False):
         raise NotImplementedError()

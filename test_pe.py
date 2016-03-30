@@ -54,5 +54,3 @@ executable.helper.set_bytes_at_rva(ins_rva,
 f = open('mod.exe','wb')
 f.write(executable.get_binary())
 f.close()
-
-cfg = executable.analyzer.cfg()

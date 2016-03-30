@@ -73,13 +73,13 @@ for function in executable.iter_functions():
 
 
             # Finally, replace the instruction we lifed with a call to the ins and jump we just put together
-            call_ins = '\xe8' + struct.pack(executable.pack_endianness + 'i', ins_jump_vaddr - (instruction.address - instruction.size))
+            call_ins = '\xe8' + struct.pack(executable.pack_endianness + 'i', ins_jump_vaddr - (instruction.address + 5))
 
             executable.replace_instruction(instruction, call_ins)
 
             logging.debug('Replaced instruction at {} with call to {}'.format(hex(instruction.address), hex(ins_jump_vaddr)))
 
-f = open('a.out','wb')
+f = open('patched_program','wb')
 f.write(executable.get_binary())
 f.close()
 

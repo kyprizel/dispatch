@@ -15,7 +15,7 @@ int main() {
     int shmid, key, status;
     uint64_t shared_mem_size;
     uint64_t *data;
-    char *target_argv[] = {"./a.out", 0};
+    char *target_argv[] = {"./patched_program", 0};
 
     int create_file = open("/tmp/shared_mem", O_RDWR|O_CREAT, 777);
     close(create_file);
@@ -35,7 +35,7 @@ int main() {
     if (0 == pid) {
         // Child
         execv(target_argv[0], target_argv);
-        kill(0, SIGKILL);
+        //kill(0, SIGKILL);
     }
     else {
         // Parent

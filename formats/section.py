@@ -42,6 +42,7 @@ def section_from_macho_section(macho_section, macho_segment):
     s.vaddr = macho_section.addr
     s.offset = macho_section.offset
     s.size = macho_section.size
+    s.raw = macho_section.data
 
     s.writable = bool(macho_segment.initprot & 0x2)
     s.executable = bool(macho_segment.initprot & 0x4)

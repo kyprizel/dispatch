@@ -204,7 +204,7 @@ class BaseExecutable(object):
         :return: The function if it is found, else None.
         '''
         for func in self.iter_functions():
-            if func.name == name:
+            if func.name == name or func.name == 'sub_'+name:
                 return func
 
         return None

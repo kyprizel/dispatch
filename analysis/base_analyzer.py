@@ -1,3 +1,4 @@
+from capstone import *
 import logging
 import re
 from collections import OrderedDict
@@ -42,22 +43,6 @@ class BaseAnalyzer(object):
         :return: None
         '''
         raise NotImplementedError()
-    
-    def _is_jump(self, instruction):
-        '''
-        Determines if the given instruction is a jump
-        :param instruction: The instruction to test
-        :return: Whether or not the given instruction is a jump
-        '''
-        return CS_GRP_JUMP in instruction.groups
-    
-    def _is_call(self, instruction):
-        '''
-        Determines if the given instruction is a call
-        :param instruction: The instruction to test
-        :return: Whether or not the given instruction is a call
-        '''
-        return CS_GRP_CALL in instruction.groups
 
     def ins_redirects_flow(self, instruction):
         '''
@@ -65,7 +50,7 @@ class BaseAnalyzer(object):
         :param instruction: The instruction to test
         :return: Whether or not the given instruction redirects flow
         '''
-        return self._is_jump(instruction) or self._is_call(instruction)
+        return instruction.is_jump() or instruction.is_call()
 
     def ins_uses_address_register(self, instruction):
         '''
@@ -74,7 +59,12 @@ class BaseAnalyzer(object):
         :param instruction: The instruction to test
         :return: Whether or not the given instruction references a register sensitive to location
         '''
-        return NotImplementedError()
+        for op in instruction.operands:
+            if op.type == Operand.REG and (op.reg in IP_REGS[self.executable.architecture] or \
+                                           op.reg in SP_REGS[self.executable.architecture]):
+                return True
+
+        return False
 
     def ins_is_replacement_candidate(self, instruction):
         '''
@@ -123,8 +113,8 @@ class BaseAnalyzer(object):
                 bbs = set([func.instructions[0].address, func.instructions[-1].address + func.instructions[-1].size])
 
                 for cur, next in zip(func.instructions[:-1], func.instructions[1:]):
-                    if CS_GRP_JUMP in cur.groups and cur.capstone_inst.operands[0].type == CS_OP_IMM:
-                        bbs.add(cur.capstone_inst.operands[0].imm)
+                    if cur.is_jump() and cur.operands[0].type == Operand.IMM:
+                        bbs.add(cur.operands[0].imm)
                         bbs.add(next.address)
 
                 bbs = sorted(list(bbs))
@@ -146,8 +136,8 @@ class BaseAnalyzer(object):
 
     def _mark_xrefs(self):
         for addr, ins in self.ins_map.iteritems():
-            for operand in ins.capstone_inst.operands:
-                if operand.type == CS_OP_IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
+            for operand in ins.operands:
+                if operand.type == Operand.IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
                     if operand.imm in self.executable.xrefs:
                         self.executable.xrefs[operand.imm].add(addr)
                     else:

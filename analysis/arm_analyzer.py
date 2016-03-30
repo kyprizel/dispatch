@@ -70,11 +70,12 @@ class ARM_Analyzer(BaseAnalyzer):
                     jump_dst = ins.operands[-1].imm
 
                     if self.executable.vaddr_is_executable(jump_dst) and jump_dst not in bb_disasm_mode:
-                        jump_dst &= ~0b1
                         if 'x' in ins.mnemonic:
-                            next_mode = CS_MODE_ARM if mode == CS_MODE_THUMB else CS_MODE_THUMB
+                            next_mode = CS_MODE_THUMB if jump_dst & 0x1 else CS_MODE_ARM
                         else:
                             next_mode = mode
+
+                        jump_dst &= ~0b1
 
                         logging.debug('Found branch to address {} in instruction at {}'
                                       .format(hex(int(jump_dst)), hex(int(ins.address))))
@@ -133,7 +134,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
             for ins in self._disassembler.disasm(code, bb_start):
                 if ins.id: # .byte "instructions" have an id of 0
-                    self.ins_map[ins.address] = Instruction(ins, self.executable)
+                    self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
         
 
 class ARM_64_Analyzer(ARM_Analyzer):
