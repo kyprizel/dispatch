@@ -89,7 +89,8 @@ class X86_Analyzer(BaseAnalyzer):
         for f in self.executable.iter_functions():
             if f.type == Function.NORMAL_FUNC:
                 for ins in f.instructions:
-                    if ins.is_call():
+                    #TODO: understand non-immediates here
+                    if ins.is_call() and ins.operands[-1].type == Operand.IMM:
                         call_addr = ins.operands[-1].imm
                         if self.executable.vaddr_is_executable(call_addr):
                             edge = CFGEdge(ins.address, call_addr, CFGEdge.DEFAULT)
