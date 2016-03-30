@@ -137,7 +137,7 @@ var divide_instructions = function() {
         'rcl','rcr','ret','retn','retf','rol','ror','sahf','sal','sar',
         'sbb','scasb','scasw','shl','shr','stc','std','sti','stosb',
         'stosw','sub','test','wait','xchg','xlat','xor', 'syscall',
-        'repne',
+        'repne','leave',
         // TODO: ARM, MIPS, etc.
         ];
     bbs.each(function(i, bb) {
