@@ -64,15 +64,15 @@ def graph(function_name):
                 print hex(edge.src),hex(edge.dst)
                 print s, d
                 continue
-            # we have to hardcode the types here because we can't import CFGEdge...
-            if edge.type == 0: # CFGEdge.DEFAULT
+            CFGEdge = edge.__class__ # we can't import CFGEdge, so extract it here
+            if edge.type == CFGEdge.DEFAULT:
                 color = "black"
-            elif edge.type == 1: # CFGEdge.COND_JUMP
+            elif edge.type == CFGEdge.COND_JUMP:
                 if edge.value:
                     color = "green"
                 else:
                     color = "red"
-            elif edge.type == 2: # CFGEdge.SWITCH
+            elif edge.type == CFGEdge.SWITCH:
                 color = "magenta"
             # hacky way of making loops to the same basic block go bottom-to-top.
             # Should be replaced if we can get ortho lines to support head/tail port options
