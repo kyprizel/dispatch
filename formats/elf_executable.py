@@ -10,10 +10,6 @@ from section import *
 
 INJECTION_SECTION_NAME = 'inject0'
 
-E_HALF_SIZE = 2
-E_WORD_SIZE = 4
-WORD_PACK_TYPE = 'I'
-
 
 class ELFExecutable(BaseExecutable):
     def __init__(self, file_path):
@@ -27,6 +23,8 @@ class ELFExecutable(BaseExecutable):
 
         if self.architecture is None:
             raise Exception('Architecture is not recognized')
+
+        logging.debug('Initialized {} {} with file \'{}\''.format(self.architecture, type(self).__name__, file_path))
 
         self.executable_segment = [s for s in self.helper.iter_segments() if s['p_type'] == 'PT_LOAD' and s['p_flags'] & 0x1][0]
 
@@ -85,10 +83,17 @@ class ELFExecutable(BaseExecutable):
                 # The address of this function in the PLT is the base PLT offset + the index of the relocation.
                 # However, since there is the extra "trampoline" entity at the top of the PLT, we need to add one to the
                 # index to account for it.
-                plt_addr = plt['sh_addr'] + ((idx+1) * plt['sh_entsize'])
+
+                # While sh_entsize is sometimes defined, it appears to be incorrect in some cases so we just ignore that
+                # and calculate it based off of the total size / num_relocations (plus the trampoline entity)
+                entsize = (plt['sh_size'] / (reloc_section.num_relocations() + 1))
+
+                plt_addr = plt['sh_addr'] + ((idx+1) * entsize)
+
+                logging.debug('Directly adding PLT function {} at vaddr {}'.format(symbol_name, hex(plt_addr)))
 
                 f = Function(plt_addr,
-                             plt['sh_entsize'],
+                             entsize,
                              symbol_name + '@PLT',
                              self,
                              type=Function.DYNAMIC_FUNC)
@@ -111,12 +116,14 @@ class ELFExecutable(BaseExecutable):
                 symbol_table = self.helper.get_section_by_name('.symtab')
                 if symbol_table:
                     for symbol in symbol_table.iter_symbols():
-                        if symbol['st_info']['type'] == 'STT_FUNC':
+                        if symbol['st_info']['type'] == 'STT_FUNC' and symbol['st_shndx'] != 'SHN_UNDEF':
                             if section['sh_addr'] <= symbol['st_value'] < section['sh_addr'] + section['sh_size']:
                                 name_for_addr[symbol['st_value']] = symbol.name
                                 function_vaddrs.add(symbol['st_value'])
 
                                 if symbol['st_size']:
+                                    logging.debug('Eagerly adding function {} from .symtab at vaddr {} with size {}'
+                                                  .format(symbol.name, hex(symbol['st_value']), hex(symbol['st_size'])))
                                     f = Function(symbol['st_value'],
                                                  symbol['st_size'],
                                                  symbol.name,
@@ -129,6 +136,10 @@ class ELFExecutable(BaseExecutable):
                 for cur_addr, next_addr in zip(function_vaddrs[:-1], function_vaddrs[1:]):
                     # If st_size was set, we already added the function above, so don't add it again.
                     if cur_addr not in self.functions:
+                        func_name = name_for_addr[cur_addr]
+                        size = next_addr - cur_addr
+                        logging.debug('Lazily adding function {} from .symtab at vaddr {} with size {}'
+                                      .format(func_name, hex(cur_addr), hex(size)))
                         f = Function(cur_addr,
                                      next_addr - cur_addr,
                                      name_for_addr[cur_addr],
@@ -163,7 +174,7 @@ class ELFExecutable(BaseExecutable):
         shstrtab_end = self.helper.get_section_by_name('.shstrtab')['sh_offset'] + self.helper.get_section_by_name('.shstrtab')['sh_size']
 
         # Binary offset where the actual data will be
-        injection_offset = len(self.get_binary()) + self.helper['e_shentsize'] + len(INJECTION_SECTION_NAME) + 1
+        injection_offset = self.binary.len + self.helper['e_shentsize'] + len(INJECTION_SECTION_NAME) + 1
 
 
         # Update number of section headers

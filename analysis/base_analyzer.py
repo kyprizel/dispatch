@@ -39,35 +39,6 @@ class BaseAnalyzer(object):
         '''
         raise NotImplementedError()
 
-    def ins_redirects_flow(self, instruction):
-        '''
-        Determines if the given instruction redirects program flow
-        :param instruction: The instruction to test
-        :return: Whether or not the given instruction redirects flow
-        '''
-        return instruction.is_jump() or instruction.is_call()
-
-    def ins_uses_address_register(self, instruction):
-        '''
-        Determines if the given instruction uses a register sensitive to location
-        E.g. if an x86 instruction uses eip or esp, the instruction is said to be sensitive to location
-        :param instruction: The instruction to test
-        :return: Whether or not the given instruction references a register sensitive to location
-        '''
-        for op in instruction.operands:
-            if op.type == Operand.REG and (op.reg in self.IP_REGS or op.reg in self.SP_REGS):
-                return True
-
-        return False
-
-    def ins_is_replacement_candidate(self, instruction):
-        '''
-        Determines if the given instruction is a candidate for replacement
-        :param instruction: The instruction to test
-        :return: Whether or not the given instruction could be replaced
-        '''
-        return not (self.ins_redirects_flow(instruction) or self.ins_uses_address_register(instruction) or self.ins_modifies_esp(instruction))
-
     def _identify_functions(self):
         '''
         Iterates through instructions and identifies functions by prologues and epilogues

@@ -14,8 +14,8 @@ class X86_Analyzer(BaseAnalyzer):
         self._disassembler.skipdata = True
 
         self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.x86_const.__dict__.iteritems() if k.startswith('X86_REG')])
-        self.IP_REGS = [26, 34, 41]
-        self.SP_REGS = [30, 44, 47]
+        self.IP_REGS = set([26, 34, 41])
+        self.SP_REGS = set([30, 44, 47])
 
     def _gen_ins_map(self):
         for section in self.executable.sections_to_disassemble():
@@ -76,6 +76,10 @@ class X86_Analyzer(BaseAnalyzer):
                                  'sub_'+hex(ops[0].address)[2:],
                                  self.executable)
                     self.executable.functions[f.address] = f
+                elif self.executable.functions[ops[0].address].size == 0:
+                    # If size was left blank from a symtab entry, fill it in with what we discovered
+                    f = self.executable.functions[ops[0].address]
+                    f.size = ops[-1].address + ops[-1].size - ops[0].address
 
                 ops = []
 

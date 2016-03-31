@@ -43,13 +43,14 @@ for function in executable.iter_functions():
         replaced_instruction = None
         for instruction in bb.instructions:
             if instruction.size >= 5 \
-                    and not executable.analyzer.ins_redirects_flow(instruction) \
-                    and not executable.analyzer.ins_modifies_esp(instruction) \
-                    and 'ip' not in instruction.op_str and 'sp' not in instruction.op_str: # TODO: Proper eip/rip checking
+                    and not instruction.redirects_flow() \
+                    and not instruction.references_sp() \
+                    and not instruction.references_ip():
+
                 logging.debug('In {} - Found candidate replacement instruction at {}: {} {}'.format(bb,
                                                                                                    hex(instruction.address),
                                                                                                    instruction.mnemonic,
-                                                                                                   instruction.op_str))
+                                                                                                   instruction.op_str()))
                 replaced_instruction = instruction
                 break
 
@@ -61,13 +62,13 @@ for function in executable.iter_functions():
 
             # Compute relative address that the jmp after the instruction should go to
             instrumentation_jmp_offset = instrumentation_vaddr - (executable.next_injection_vaddr + instruction.size + 5)
-            ins_and_jump = instruction.bytes + '\xe9' + struct.pack(executable.pack_endianness + 'i',
+            ins_and_jump = instruction.raw + '\xe9' + struct.pack(executable.pack_endianness + 'i',
                                                                     instrumentation_jmp_offset)
 
             ins_jump_vaddr = executable.inject(ins_and_jump)
 
             logging.debug('Added instruction ({} {}) and jmp to instrumentation at {}'.format(instruction.mnemonic,
-                                                                                              instruction.op_str,
+                                                                                              instruction.op_str(),
                                                                                               hex(ins_jump_vaddr)))
 
 
