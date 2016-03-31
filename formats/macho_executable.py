@@ -11,7 +11,6 @@ from section import *
 
 INJECTION_SEGMENT_NAME = 'INJECT'
 INJECTION_SECTION_NAME = 'inject'
-INJECTION_VADDR = 0x100003000
 
 class MachOExecutable(BaseExecutable):
     def __init__(self, file_path):
@@ -73,7 +72,6 @@ class MachOExecutable(BaseExecutable):
                         size = 0
                         logging.debug('Adding function {} from the symtab at vaddr {} with size {}'
                                       .format(symbol_name, hex(symbol.n_value), hex(size)))
-                        # TODO: Size?
                         f = Function(symbol.n_value, size, symbol_name, self)
                         self.functions[symbol.n_value] = f
 
@@ -115,19 +113,21 @@ class MachOExecutable(BaseExecutable):
         # Total size of the stuff we're going to be adding in the middle of the binary
         offset = 72+80 if self.is_64_bit() else 56+68  # 1 segment header + 1 section header
 
-        logging.debug('Creating new MachOSegment at vaddr {}'.format(hex(INJECTION_VADDR)))
+        fileoff = (self.binary.len & ~0xfff) + 0x1000
+
+        logging.debug('Creating new MachOSegment at vaddr {}'.format(hex(0x100000000 + fileoff)))
         new_segment = MachOSegment(arch=64 if self.is_64_bit() else 32)
         new_segment.segname = INJECTION_SEGMENT_NAME
-        new_segment.fileoff = (self.binary.len & ~0xfff) + 0x1000
+        new_segment.fileoff = fileoff
         new_segment.filesize = 0
-        new_segment.vmaddr = 0x100000000 + new_segment.fileoff
+        new_segment.vmaddr = 0x100000000 + fileoff
         new_segment.vmsize = 0x1000
         new_segment.maxprot = 0x7 #RWX
         new_segment.initprot = 0x5 # RX
         new_segment.flags = 0
         new_segment.nsects = 1
 
-        logging.debug('Creating new MachOSection at vaddr {}'.format(hex(INJECTION_VADDR)))
+        logging.debug('Creating new MachOSection at vaddr {}'.format(hex(0x100000000 + fileoff)))
         new_section = MachOSection(arch=64 if self.is_64_bit() else 32)
         new_section.sectname = INJECTION_SECTION_NAME
         new_section.segname = new_segment.segname
