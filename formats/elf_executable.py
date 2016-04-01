@@ -2,6 +2,7 @@ from elftools.elf.elffile import ELFFile
 from elftools.construct import Container
 from elftools.elf.enums import *
 from elftools.elf.constants import *
+from elftools.elf.sections import SymbolTableSection
 import logging
 import struct
 
@@ -75,29 +76,32 @@ class ELFExecutable(BaseExecutable):
 
         if reloc_section:
             dynsym = self.helper.get_section(reloc_section['sh_link']) # .dynsym
-            plt = self.helper.get_section_by_name('.plt')
-            for idx, reloc in enumerate(reloc_section.iter_relocations()):
-                # Get the symbol's name from dynsym
-                symbol_name = dynsym.get_symbol(reloc['r_info_sym']).name
+            if isinstance(dynsym, SymbolTableSection):
+                plt = self.helper.get_section_by_name('.plt')
+                for idx, reloc in enumerate(reloc_section.iter_relocations()):
+                    # Get the symbol's name from dynsym
+                    symbol_name = dynsym.get_symbol(reloc['r_info_sym']).name
 
-                # The address of this function in the PLT is the base PLT offset + the index of the relocation.
-                # However, since there is the extra "trampoline" entity at the top of the PLT, we need to add one to the
-                # index to account for it.
+                    # The address of this function in the PLT is the base PLT offset + the index of the relocation.
+                    # However, since there is the extra "trampoline" entity at the top of the PLT, we need to add one to the
+                    # index to account for it.
 
-                # While sh_entsize is sometimes defined, it appears to be incorrect in some cases so we just ignore that
-                # and calculate it based off of the total size / num_relocations (plus the trampoline entity)
-                entsize = (plt['sh_size'] / (reloc_section.num_relocations() + 1))
+                    # While sh_entsize is sometimes defined, it appears to be incorrect in some cases so we just ignore that
+                    # and calculate it based off of the total size / num_relocations (plus the trampoline entity)
+                    entsize = (plt['sh_size'] / (reloc_section.num_relocations() + 1))
 
-                plt_addr = plt['sh_addr'] + ((idx+1) * entsize)
+                    plt_addr = plt['sh_addr'] + ((idx+1) * entsize)
 
-                logging.debug('Directly adding PLT function {} at vaddr {}'.format(symbol_name, hex(plt_addr)))
+                    logging.debug('Directly adding PLT function {} at vaddr {}'.format(symbol_name, hex(plt_addr)))
 
-                f = Function(plt_addr,
-                             entsize,
-                             symbol_name + '@PLT',
-                             self,
-                             type=Function.DYNAMIC_FUNC)
-                self.functions[plt_addr] = f
+                    f = Function(plt_addr,
+                                 entsize,
+                                 symbol_name + '@PLT',
+                                 self,
+                                 type=Function.DYNAMIC_FUNC)
+                    self.functions[plt_addr] = f
+            else:
+                logging.debug('Relocation section had sh_link to {}. Not parsing symbols...'.format(dynsym))
 
 
 

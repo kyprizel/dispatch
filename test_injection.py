@@ -59,6 +59,4 @@ for function in [executable.function_named("_main")]: #executable.iter_functions
 
         logging.debug('Replaced instruction at {} with call to {}'.format(hex(replaced_instruction.address), hex(ins_jump_vaddr)))
 
-f = open('patched','wb')
-f.write(executable.get_binary())
-f.close()
+executable.save('patched')
