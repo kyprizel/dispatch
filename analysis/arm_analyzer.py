@@ -20,8 +20,8 @@ class ARM_Analyzer(BaseAnalyzer):
         self._disassembler.skipdata = True
 
         self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.arm_const.__dict__.iteritems() if k.startswith('ARM_REG')])
-        self.IP_REGS = [11]
-        self.SP_REGS = [12]
+        self.IP_REGS = set([11])
+        self.SP_REGS = set([12])
 
     def _gen_ins_map(self):
         # Again, since ARM binaries can have code using both instruction sets, we basically have to make a CFG and
@@ -159,5 +159,5 @@ class ARM_64_Analyzer(ARM_Analyzer):
         self._disassembler.skipdata = True
 
         self.REGISTER_NAMES = dict([(v,k[10:].lower()) for k,v in capstone.arm64_const.__dict__.iteritems() if k.startswith('ARM64_REG')])
-        self.IP_REGS = []
-        self.SP_REGS = [4, 5]
+        self.IP_REGS = set()
+        self.SP_REGS = set([4, 5])

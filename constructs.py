@@ -97,6 +97,18 @@ class Instruction(object):
     def is_jump(self):
         return Instruction.GRP_JUMP in self.groups
 
+    def redirects_flow(self):
+        return self.is_jump() or self.is_call()
+
+    def references_ip(self):
+        return any(self._executable.analyzer.IP_REGS.intersection(op.used_regs()) for op in self.operands)
+
+    def references_sp(self):
+        return any(self._executable.analyzer.SP_REGS.intersection(op.used_regs()) for op in self.operands)
+
+    def op_str(self):
+        return ', '.join(str(op) for op in self.operands)
+
     def nice_op_str(self):
         '''
         Returns the operand string "nicely formatted." I.e. replaces addresses with function names (and function
@@ -114,15 +126,12 @@ class Instruction(object):
                 if operand.imm in self._executable.functions:
                     op_strings[-1] = self._executable.functions[operand.imm].name
                 elif self._executable.vaddr_is_executable(operand.imm):
-                    func_addrs = self._executable.functions.keys()
-                    func_addrs.sort(reverse=True)
-                    if func_addrs:
-                        for func_addr in func_addrs:
-                            if func_addr < operand.imm:
-                                break
-                        diff = operand.imm - func_addr
-                        op_strings[-1] = self._executable.functions[func_addr].name+'+'+hex(diff)
-        else:
+                    for func in self._executable.iter_functions():
+                        if func.contains_address(operand.imm):
+                            diff = operand.imm - func.address
+                            op_strings[-1] = func.name+'+'+hex(diff)
+                            break
+        else: # TODO: Limit this to only be sensible instructions (e.g. mov, push, etc.)
             for i, operand in enumerate(self.operands):
                 if operand.type == Operand.IMM and operand.imm in self._executable.strings:
                     referenced_string = self._executable.strings[operand.imm]
@@ -161,6 +170,14 @@ class Operand(object):
             return Operand(Operand.MEM, self._instruction, disp=addr)
 
         return self
+
+    def used_regs(self):
+        if self.type == Operand.REG:
+            return set([self.reg])
+        elif self.type == Operand.MEM:
+            return set([self.base, self.index])
+        else:
+            return set()
 
     def __str__(self):
         if self.type == Operand.IMM:

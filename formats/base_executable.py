@@ -204,7 +204,7 @@ class BaseExecutable(object):
         :return: The function if it is found, else None.
         '''
         for func in self.iter_functions():
-            if func.name == name or func.name == 'sub_'+name:
+            if func.name == name or func.name == 'sub_'+name or func.name == name+'@PLT':
                 return func
 
         return None
@@ -217,3 +217,7 @@ class BaseExecutable(object):
         :return: None
         '''
         raise NotImplementedError()
+
+    def save(self, file_name):
+        with open(file_name, 'wb') as f:
+            f.write(self.get_binary())
