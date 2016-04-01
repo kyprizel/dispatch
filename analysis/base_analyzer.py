@@ -51,10 +51,13 @@ class BaseAnalyzer(object):
         Iterates through all found functions and add instructions inside that function to the Function object
         :return: None
         '''
+        insn_addrs = sorted(self.ins_map.keys())
+
         for f in self.executable.iter_functions():
-            for addr in self.ins_map:
-                if f.contains_address(addr):
-                    f.instructions.append(self.ins_map[addr])
+            i = insn_addrs.index(f.address)
+            while i < len(insn_addrs) and insn_addrs[i] < f.address + f.size:
+                f.instructions.append(self.ins_map[insn_addrs[i]])
+                i += 1
 
     def _identify_strings(self):
         '''
@@ -114,15 +117,22 @@ class BaseAnalyzer(object):
         Generates the instruction map, extracts symbol tables, identifies functions/BBs, and "prettifies" instruction op_str's
         :return: None
         '''
+        logging.info('Generating instruction map')
         self._gen_ins_map()
 
+        logging.info('Extracting symbol table')
         self.executable._extract_symbol_table()
 
+        logging.info('Identifying functions')
         self._identify_functions()
+        logging.info('Populating function instructions')
         self._populate_func_instructions()
+        logging.info('Identifying basic blocks')
         self._identify_bbs()
+        logging.info('Marking XRefs')
         self._mark_xrefs()
 
+        logging.info('Identifying strings')
         self._identify_strings()
 
     def cfg(self):

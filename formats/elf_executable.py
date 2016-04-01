@@ -4,7 +4,6 @@ from elftools.elf.enums import *
 from elftools.elf.constants import *
 from elftools.elf.sections import SymbolTableSection
 import logging
-import struct
 
 from base_executable import *
 from section import *
@@ -26,6 +25,8 @@ class ELFExecutable(BaseExecutable):
             raise Exception('Architecture is not recognized')
 
         logging.debug('Initialized {} {} with file \'{}\''.format(self.architecture, type(self).__name__, file_path))
+
+        self.sections = [section_from_elf_section(s) for s in self.helper.iter_sections()]
 
         self.executable_segment = [s for s in self.helper.iter_segments() if s['p_type'] == 'PT_LOAD' and s['p_flags'] & 0x1][0]
 
@@ -56,13 +57,9 @@ class ELFExecutable(BaseExecutable):
         # TODO: Maybe limit this because we use this as part of our injection method?
         return self.executable_segment['p_memsz']
 
-    def iter_sections(self):
-        for e_section in self.helper.iter_sections():
-            yield section_from_elf_section(e_section)
-
     def iter_string_sections(self):
         STRING_SECTIONS = ['.rodata', '.data', '.bss']
-        for s in self.iter_sections():
+        for s in self.sections:
             if s.name in STRING_SECTIONS:
                 yield s
 

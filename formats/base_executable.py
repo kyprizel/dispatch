@@ -62,19 +62,12 @@ class BaseExecutable(object):
         '''
         raise NotImplementedError()
 
-    def iter_sections(self):
-        '''
-        Iterates through each section in the executable.
-        :return: Iterator
-        '''
-        raise NotImplementedError()
-
     def sections_to_disassemble(self):
         '''
         Iterates through each section in the executable that is supposed to be disassembled.
         :return: Iterator
         '''
-        for s in self.iter_sections():
+        for s in self.sections:
             if s.executable:
                 yield s
 
@@ -91,14 +84,14 @@ class BaseExecutable(object):
         :param vaddr: Virtual address to check
         :return: True if the vaddr is in an executable segment, False otherwise
         '''
-        for section in self.iter_sections():
+        for section in self.sections:
             if section.executable and section.contains_vaddr(vaddr):
                 return True
 
         return False
 
     def section_containing_vaddr(self, vaddr):
-        for section in self.iter_sections():
+        for section in self.sections:
             if section.contains_vaddr(vaddr):
                 return section
 
@@ -125,7 +118,7 @@ class BaseExecutable(object):
         :param vaddr: The virtual address to get the offset for.
         :return: The offset in the binary of the virtual address.
         '''
-        for section in self.iter_sections():
+        for section in self.sections:
             if section.contains_vaddr(vaddr):
                 return section.offset + vaddr - section.vaddr
 
