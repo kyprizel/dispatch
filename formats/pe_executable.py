@@ -32,10 +32,6 @@ class PEExecutable(BaseExecutable):
     def get_binary(self):
         return self.helper.write()
 
-    def iter_sections(self):
-        for pe_section in self.helper.sections:
-            yield section_from_pe_section(pe_section, self.helper)
-
     def iter_string_sections(self):
         return []
 

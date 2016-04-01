@@ -27,6 +27,11 @@ class MachOExecutable(BaseExecutable):
 
         self.pack_endianness = '<'
 
+        self.sections = []
+        for segment in self.helper.segments:
+            for section in segment.sections:
+                self.sections.append(section_from_macho_section(section, segment))
+
         self.executable_segment = [s for s in self.helper.segments if s.initprot & 0x4][0]
 
         self.next_injection_vaddr = 0
@@ -45,11 +50,6 @@ class MachOExecutable(BaseExecutable):
 
     def executable_segment_size(self):
         return self.executable_segment.vmszie
-
-    def iter_sections(self):
-        for segment in self.helper.segments:
-            for section in segment.sections:
-                yield section_from_macho_section(section, segment)
 
     def _extract_symbol_table(self):
         ordered_symbols = []
@@ -105,7 +105,7 @@ class MachOExecutable(BaseExecutable):
 
     def iter_string_sections(self):
         STRING_SECTIONS = ['__const', '__cstring', '__objc_methname', '__objc_classname']
-        for s in self.iter_sections():
+        for s in self.sections:
             if s.name in STRING_SECTIONS:
                 yield s
 
