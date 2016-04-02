@@ -1,4 +1,4 @@
-from formats import *
+from dispatch.formats import *
 from webui.app import run
 from sys import argv
 
