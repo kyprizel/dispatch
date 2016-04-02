@@ -97,7 +97,7 @@ class BaseAnalyzer(object):
                 bb_instructions = []
 
                 for ins in func.instructions:
-                    if ins.address == bb_ends[0]:
+                    if ins.address == bb_ends[0] and bb_instructions:
                         bb = BasicBlock(func,
                                         bb_instructions[0].address,
                                         bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
