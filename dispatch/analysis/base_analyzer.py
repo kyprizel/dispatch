@@ -55,10 +55,14 @@ class BaseAnalyzer(object):
         insn_addrs = sorted(self.ins_map.keys())
 
         for f in self.executable.iter_functions():
-            i = insn_addrs.index(f.address)
-            while i < len(insn_addrs) and insn_addrs[i] < f.address + f.size:
-                f.instructions.append(self.ins_map[insn_addrs[i]])
-                i += 1
+            try:
+                i = insn_addrs.index(f.address)
+
+                while i < len(insn_addrs) and insn_addrs[i] < f.address + f.size:
+                    f.instructions.append(self.ins_map[insn_addrs[i]])
+                    i += 1
+            except ValueError:
+                logging.debug('Function {} starts at code outside any executable section.'.format(f))
 
     def _identify_strings(self):
         '''
