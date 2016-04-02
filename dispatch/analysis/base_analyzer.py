@@ -83,29 +83,33 @@ class BaseAnalyzer(object):
     def _identify_bbs(self):
         for func in self.executable.iter_functions():
             if func.instructions:
-                bbs = set([func.instructions[0].address, func.instructions[-1].address + func.instructions[-1].size])
+                bb_ends = set([func.instructions[-1].address + func.instructions[-1].size])
 
-                for cur, next in zip(func.instructions[:-1], func.instructions[1:]):
+                for i in range(len(func.instructions) - 1):
+                    cur = func.instructions[i]
+                    next = func.instructions[i+1]
+
                     if cur.is_jump() and cur.operands[0].type == Operand.IMM:
-                        bbs.add(cur.operands[0].imm)
-                        bbs.add(next.address)
+                        bb_ends.add(cur.operands[0].imm)
+                        bb_ends.add(next.address)
 
-                bbs = sorted(list(bbs))
+                bb_ends = sorted(list(bb_ends))
+                bb_instructions = []
 
-                for start, end in zip(bbs[:-1], bbs[1:]):
-                    bb_instructions = []
-
-                    for ins in func.instructions:
-                        if start <= ins.address < end:
-                            bb_instructions.append(ins)
-
-                    if bb_instructions:
+                for ins in func.instructions:
+                    if ins.address == bb_ends[0]:
                         bb = BasicBlock(func,
                                         bb_instructions[0].address,
                                         bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
                         bb.instructions = bb_instructions
 
                         func.bbs.append(bb)
+
+                        bb_ends = bb_ends[1:]
+                        bb_instructions = [ins]
+                    else:
+                        bb_instructions.append(ins)
+
 
     def _mark_xrefs(self):
         for addr, ins in self.ins_map.iteritems():
