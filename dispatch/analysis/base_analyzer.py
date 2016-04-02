@@ -102,13 +102,21 @@ class BaseAnalyzer(object):
                                         bb_instructions[0].address,
                                         bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
                         bb.instructions = bb_instructions
-
                         func.bbs.append(bb)
 
                         bb_ends = bb_ends[1:]
                         bb_instructions = [ins]
                     else:
                         bb_instructions.append(ins)
+
+                # There will always be one BB left over which "ends" at the first address of the next function, so be
+                # sure to add it
+
+                bb = BasicBlock(func,
+                                bb_instructions[0].address,
+                                bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
+                bb.instructions = bb_instructions
+                func.bbs.append(bb)
 
 
     def _mark_xrefs(self):

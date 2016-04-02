@@ -3,6 +3,7 @@ import logging
 import capstone
 from enums import *
 
+
 class Function(object):
     NORMAL_FUNC = 0
     DYNAMIC_FUNC = 1
@@ -46,14 +47,13 @@ class Function(object):
             logging.debug('Call to demangle with a non-reserved function name')
 
 
-
 class BasicBlock(object):
     def __init__(self, parent_func, address, size):
         self.parent = parent_func
         self.address = address
         self.size = size
         self.offset = self.parent.address - self.address
-        self.instructions = [i for i in self.parent.instructions if self.address <= i.address < self.address + self.size]
+        self.instructions = []
     
     def __repr__(self):
         return '<Basic block at {}>'.format(hex(self.address))
@@ -61,6 +61,7 @@ class BasicBlock(object):
     def print_disassembly(self):
         for i in self.instructions:
             print hex(i.address) + ' ' + str(i)
+
 
 class Instruction(object):
     GRP_CALL = 0
@@ -140,6 +141,7 @@ class Instruction(object):
 
         return ', '.join(op_strings)
 
+
 class Operand(object):
     IMM = 0
     FP = 1
@@ -214,6 +216,7 @@ class Operand(object):
 
             return s
 
+
 def operand_from_cs_op(csOp, instruction):
     if csOp.type == capstone.CS_OP_IMM:
         return Operand(Operand.IMM, instruction, imm=csOp.imm)
@@ -223,6 +226,7 @@ def operand_from_cs_op(csOp, instruction):
         return Operand(Operand.REG, instruction, reg=csOp.reg)
     elif csOp.type == capstone.CS_OP_MEM:
         return Operand(Operand.MEM, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
+
 
 def instruction_from_cs_insn(csInsn, executable):
     groups = []
