@@ -1,5 +1,6 @@
 import logging
 import re
+import string
 from collections import OrderedDict
 
 from constructs import *
@@ -65,15 +66,15 @@ class BaseAnalyzer(object):
         :return: None
         '''
         # https://stackoverflow.com/questions/6804582/extract-strings-from-a-binary-file-in-python
-        chars = r"A-Za-z0-9/\-:.,_$%'()[\]<> "
-        shortest_run = 3
+        chars = string.printable
+        shortest_run = 2
         regexp = '[%s]{%d,}' % (chars, shortest_run)
         pattern = re.compile(regexp)
 
         for section in self.executable.iter_string_sections():
-            for string in pattern.finditer(section.raw):
-                vaddr = section.vaddr + string.start()
-                self.executable.strings[vaddr] = String(string.group(), vaddr, self.executable)
+            for found_string in pattern.finditer(section.raw):
+                vaddr = section.vaddr + found_string.start()
+                self.executable.strings[vaddr] = String(found_string.group(), vaddr, self.executable)
 
     def _identify_bbs(self):
         for func in self.executable.iter_functions():

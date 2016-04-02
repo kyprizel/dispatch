@@ -248,7 +248,7 @@ class String(object):
         self._executable = executable
 
     def __repr__(self):
-        return '<String \'{}\' at {}>'.format(self.string, self.vaddr)
+        return '<String \'{}\' at {}>'.format(self.string, hex(self.vaddr))
 
     def __str__(self):
         return self.string
@@ -279,4 +279,4 @@ class CFGEdge(object):
         return not self.__eq__(other)
 
     def __repr__(self):
-        return '<CFGEdge from {} to {}>'.format(self.src, self.dst)
+        return '<CFGEdge from {} to {}>'.format(hex(self.src), hex(self.dst))
