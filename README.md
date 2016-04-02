@@ -10,7 +10,7 @@ Programmatic binary disassembly and patching
 
 ## Quick Example
 ```python
-from dispatch.formats import *
-ex = read_executable('/bin/cat')
+import dispatch
+ex = dispatch.read_executable('/bin/cat')
 print ex.functions
 ```

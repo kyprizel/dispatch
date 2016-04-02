@@ -1,4 +1,4 @@
-from dispatch.formats import *
+import dispatch
 
 import logging, struct, sys
 
@@ -10,7 +10,7 @@ if len(sys.argv) != 2:
 logging.basicConfig(level=logging.INFO)
 
 # Load in the executable with read_executable (pass filename)
-executable = read_executable(sys.argv[1])
+executable = dispatch.read_executable(sys.argv[1])
 
 # Invoke the analyzer to find functions
 executable.analyze()

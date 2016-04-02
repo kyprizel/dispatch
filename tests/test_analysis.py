@@ -1,9 +1,9 @@
-from dispatch.formats import *
+import dispatch
 
 import logging, sys
 
 logging.basicConfig(level=logging.DEBUG)
 
-executable = read_executable(sys.argv[1])
+executable = dispatch.read_executable(sys.argv[1])
 
 executable.analyze()
