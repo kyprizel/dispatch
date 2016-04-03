@@ -1,8 +1,10 @@
 import subprocess
 import logging
 import capstone
+import string
 from enums import *
 
+import ctypes
 
 class Function(object):
     NORMAL_FUNC = 0
@@ -237,7 +239,18 @@ def instruction_from_cs_insn(csInsn, executable):
 
     instruction = Instruction(csInsn.address, csInsn.size, csInsn.bytes, csInsn.mnemonic, [], groups, csInsn, executable)
 
-    operands = [operand_from_cs_op(op, instruction) for op in csInsn.operands]
+    # We manually pull out the instruction details here so that capstone doesn't deepcopy everything which burns time
+    # and memory
+    detail = ctypes.cast(csInsn._raw.detail, ctypes.POINTER(capstone._cs_detail)).contents
+
+    if executable.architecture == ARCHITECTURE.X86 or executable.architecture == ARCHITECTURE.X86_64:
+        detail = detail.arch.x86
+    elif executable.architecture == ARCHITECTURE.ARM:
+        detail = detail.arch.arm
+    elif executable.architecture == ARCHITECTURE.ARM_64:
+        detail = detail.arch.arm64
+
+    operands = [operand_from_cs_op(detail.operands[i], instruction) for i in range(detail.op_count)]
 
     instruction.operands = operands
 
@@ -245,9 +258,9 @@ def instruction_from_cs_insn(csInsn, executable):
 
 
 class String(object):
-    def __init__(self, string, vaddr, executable):
-        self.string = string
-        self.short_name = self.string.replace(' ','')[:8]
+    def __init__(self, s, vaddr, executable):
+        self.string = s
+        self.short_name = self.string.replace(' '+string.punctuation, '_')[:8]
         self.vaddr = vaddr
         self._executable = executable
 
