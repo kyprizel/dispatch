@@ -1,13 +1,8 @@
 import logging
 import struct
 
-from pymacho import Constants
-from pymacho.MachO import MachO
-from pymacho.MachOSection import MachOSection
-from pymacho.MachOSegment import MachOSegment
-from pymacho.MachOSymtabCommand import MachOSymtabCommand
-from pymacho.MachODYSymtabCommand import MachODYSymtabCommand
-from pymacho.MachOMainCommand import MachOMainCommand
+from macholib.MachO import MachO
+from macholib.mach_o import *
 
 from .base_executable import *
 from .section import *
@@ -21,6 +16,9 @@ class MachOExecutable(BaseExecutable):
 
         self.helper = MachO(self.fp)
 
+        if self.helper.fat:
+            raise Exception('MachO fat binaries are not supported at this time')
+
         self.architecture = self._identify_arch()
 
         if self.architecture is None:
@@ -28,25 +26,27 @@ class MachOExecutable(BaseExecutable):
 
         logging.debug('Initialized {} {} with file \'{}\''.format(self.architecture, type(self).__name__, file_path))
 
-        self.pack_endianness = '<'
+        self.pack_endianness = self.helper.headers[0].endian
 
         self.sections = []
-        for segment in self.helper.segments:
-            for section in segment.sections:
-                self.sections.append(section_from_macho_section(section, segment))
+        for lc, cmd, data in self.helper.headers[0].commands:
+            if lc.cmd in (LC_SEGMENT, LC_SEGMENT_64):
+                for section in data:
+                    self.sections.append(section_from_macho_section(section, cmd))
 
-        self.executable_segment = [s for s in self.helper.segments if s.initprot & 0x4][0]
+        self.executable_segment = [cmd for lc, cmd, _ in self.helper.headers[0].commands
+                                   if lc.cmd in (LC_SEGMENT, LC_SEGMENT_64) and cmd.initprot & 0x4][0]
 
         self.next_injection_vaddr = 0
 
     def _identify_arch(self):
-        if self.helper.header.cputype == Constants.CPU_TYPE_I386:
+        if self.helper.headers[0].header.cputype == 0x7:
             return ARCHITECTURE.X86
-        elif self.helper.header.cputype == Constants.CPU_TYPE_X86_64:
+        elif self.helper.headers[0].header.cputype == 0x01000007:
             return ARCHITECTURE.X86_64
-        elif self.helper.header.cputype == Constants.CPU_TYPE_ARM:
+        elif self.helper.headers[0].header.cputype == 0xc:
             return ARCHITECTURE.ARM
-        elif self.helper.header.cputype == Constants.CPU_TYPE_ARM64:
+        elif self.helper.headers[0].header.cputype == 0x0100000c:
             return ARCHITECTURE.ARM_64
         else:
             return None
@@ -58,60 +58,69 @@ class MachOExecutable(BaseExecutable):
         return self.executable_segment.vmszie
 
     def entry_point(self):
-        # TODO
+        for lc, cmd, _ in self.helper.headers[0].commands:
+            if lc.cmd == LC_MAIN:
+                return cmd.entryoff
         return
 
     def _extract_symbol_table(self):
         ordered_symbols = []
 
-        for cmd in self.helper.commands:
-            # NOTE: Is it safe to assume to the symtab command always comes before the dysymtab command?
-            if isinstance(cmd, MachOSymtabCommand):
-                for i in range(len(cmd.syms)):
-                    symbol = cmd.syms[i]
+        symtab_command = self.helper.headers[0].getSymbolTableCommand()
+        if symtab_command:
+            self.binary.seek(symtab_command.stroff)
+            symbol_strings = self.binary.read(symtab_command.strsize)
 
-                    self.binary.seek(cmd.stroff)
-                    symbol_strings = self.binary.read(cmd.strsize)
+            self.binary.seek(symtab_command.symoff)
 
-                    is_ext = symbol.n_type & 0x1 and symbol.n_value == 0
+            for i in range(symtab_command.nsyms):
+                if self.is_64_bit():
+                    symbol = nlist_64.from_fileobj(self.binary, _endian_=self.pack_endianness)
+                else:
+                    symbol = nlist.from_fileobj(self.binary, _endian_=self.pack_endianness)
 
-                    symbol_name = symbol_strings[symbol.n_strx:].split('\x00')[0]
+                is_ext = symbol.n_type & 0x1 and symbol.n_value == 0
 
-                    # Ignore Apple's hack for radar bug 5614542
-                    if not is_ext and symbol_name != 'radr://5614542':
-                        size = 0
-                        logging.debug('Adding function {} from the symtab at vaddr {} with size {}'
-                                      .format(symbol_name, hex(symbol.n_value), hex(size)))
-                        f = Function(symbol.n_value, size, symbol_name, self)
-                        self.functions[symbol.n_value] = f
+                symbol_name = symbol_strings[symbol.n_un:].split('\x00')[0]
 
-                    ordered_symbols.append(symbol_name)
+                # Ignore Apple's hack for radar bug 5614542
+                if not is_ext and symbol_name != 'radr://5614542':
+                    size = 0
+                    logging.debug('Adding function {} from the symtab at vaddr {} with size {}'
+                                  .format(symbol_name, hex(symbol.n_value), hex(size)))
+                    f = Function(symbol.n_value, size, symbol_name, self)
+                    self.functions[symbol.n_value] = f
 
-            if isinstance(cmd, MachODYSymtabCommand):
-                self.binary.seek(cmd.indirectsymoff)
-                indirect_symbols = self.binary.read(cmd.nindirectsyms*4)
+                ordered_symbols.append(symbol_name)
 
-                sym_offsets = struct.unpack('<' + 'I'*cmd.nindirectsyms, indirect_symbols)
+        dysymtab_command = self.helper.headers[0].getDynamicSymbolTableCommand()
+        if dysymtab_command:
+            self.binary.seek(dysymtab_command.indirectsymoff)
+            indirect_symbols = self.binary.read(dysymtab_command.nindirectsyms*4)
 
-                for section in self.executable_segment.sections:
-                    if section.flags & Constants.S_NON_LAZY_SYMBOL_POINTERS \
-                        or section.flags & Constants.S_LAZY_SYMBOL_POINTERS \
-                        or section.flags & Constants.S_SYMBOL_STUBS:
+            sym_offsets = struct.unpack(self.pack_endianness + 'I'*dysymtab_command.nindirectsyms, indirect_symbols)
 
-                        if section.flags & Constants.S_SYMBOL_STUBS:
-                            stride = section.reserved2
-                        else:
-                            stride = (64 if self.is_64_bit() else 32)
+            for lc, cmd, sections in self.helper.headers[0].commands:
+                if lc.cmd in (LC_SEGMENT, LC_SEGMENT_64) and cmd.initprot & 0x4:
+                    for section in sections:
+                        if section.flags & S_NON_LAZY_SYMBOL_POINTERS \
+                            or section.flags & S_LAZY_SYMBOL_POINTERS \
+                            or section.flags & S_SYMBOL_STUBS:
 
-                        count = section.size / stride
+                            if section.flags & S_SYMBOL_STUBS:
+                                stride = section.reserved2
+                            else:
+                                stride = (64 if self.is_64_bit() else 32)
 
-                        for i in range(count):
-                            addr = self.executable_segment.vmaddr + section.offset + (i * stride)
-                            symbol_name = ordered_symbols[sym_offsets[i + section.reserved1]]
-                            logging.debug('Adding function {} from the dynamic symtab at vaddr {} with size {}'
-                                          .format(symbol_name, hex(addr), hex(stride)))
-                            f = Function(addr, stride, symbol_name, self, type=Function.DYNAMIC_FUNC)
-                            self.functions[addr] = f
+                            count = section.size / stride
+
+                            for i in range(count):
+                                addr = self.executable_segment.vmaddr + section.offset + (i * stride)
+                                symbol_name = ordered_symbols[sym_offsets[i + section.reserved1]]
+                                logging.debug('Adding function {} from the dynamic symtab at vaddr {} with size {}'
+                                              .format(symbol_name, hex(addr), hex(stride)))
+                                f = Function(addr, stride, symbol_name, self, type=Function.DYNAMIC_FUNC)
+                                self.functions[addr] = f
 
     def iter_string_sections(self):
         STRING_SECTIONS = ['__const', '__cstring', '__objc_methname', '__objc_classname']
@@ -125,20 +134,24 @@ class MachOExecutable(BaseExecutable):
 
         fileoff = (self.binary.len & ~0xfff) + 0x1000
 
-        logging.debug('Creating new MachOSegment at vaddr {}'.format(hex(0x100000000 + fileoff)))
-        new_segment = MachOSegment(arch=64 if self.is_64_bit() else 32)
+        vmaddr = self.function_named('__mh_execute_header').address + fileoff
+
+        logging.debug('Creating new MachOSegment at vaddr {}'.format(hex(vmaddr)))
+        new_segment = segment_command_64() if self.is_64_bit() else segment_command()
+        new_segment._endian_ = self.pack_endianness
         new_segment.segname = INJECTION_SEGMENT_NAME
         new_segment.fileoff = fileoff
         new_segment.filesize = 0
-        new_segment.vmaddr = 0x100000000 + fileoff
+        new_segment.vmaddr = vmaddr
         new_segment.vmsize = 0x1000
         new_segment.maxprot = 0x7 #RWX
         new_segment.initprot = 0x5 # RX
         new_segment.flags = 0
         new_segment.nsects = 1
 
-        logging.debug('Creating new MachOSection at vaddr {}'.format(hex(0x100000000 + fileoff)))
-        new_section = MachOSection(arch=64 if self.is_64_bit() else 32)
+        logging.debug('Creating new MachOSection at vaddr {}'.format(hex(vmaddr)))
+        new_section = section_64() if self.is_64_bit() else section()
+        new_section._endian_ = self.pack_endianness
         new_section.sectname = INJECTION_SECTION_NAME
         new_section.segname = new_segment.segname
         new_section.addr = new_segment.vmaddr
@@ -146,22 +159,21 @@ class MachOExecutable(BaseExecutable):
         new_section.offset = new_segment.fileoff
         new_section.align = 4
         new_section.flags = 0x80000400
-        new_section.data = ''
-        new_section.relocs = []
-        if self.is_64_bit():
-            new_section.reserved3 = 0
 
-        new_segment.sections = [new_section]
+        lc = load_command()
+        lc._endian_ = self.pack_endianness
+        lc.cmd = LC_SEGMENT_64 if self.is_64_bit() else LC_SEGMENT
+        lc.cmdsize = offset
 
-        self.helper.segments.append(new_segment)
+        self.helper.headers[0].commands.append((lc, new_segment, [new_section]))
 
-        self.helper.header.ncmds += 1
-        self.helper.header.sizeofcmds += offset
+        self.helper.headers[0].header.ncmds += 1
+        self.helper.headers[0].header.sizeofcmds += offset
 
         return new_segment
 
     def inject(self, asm, update_entry=False):
-        found = [s for s in self.helper.segments if s.segname == INJECTION_SEGMENT_NAME]
+        found = [s for lc,s,_ in self.helper.headers[0].commands if lc.cmd in (LC_SEGMENT, LC_SEGMENT_64) and s.segname == INJECTION_SEGMENT_NAME]
         if found:
             injection_vaddr = found[0].vmaddr
         else:
@@ -170,29 +182,29 @@ class MachOExecutable(BaseExecutable):
 
 
         if update_entry:
-            for command in self.helper.commands:
-                if isinstance(command, MachOMainCommand):
-                    command.entryoff = injection_vaddr
+            for lc, cmd, _ in self.helper.headers[0].commands:
+                if lc.cmd == LC_MAIN:
+                    cmd.entryoff = injection_vaddr
+                    break
 
 
-        self.binary = StringIO()
-        self.helper.header.write(self.binary)
-        for segment in self.helper.segments:
-            if segment.segname == INJECTION_SEGMENT_NAME:
+        self.binary.seek(0)
+
+        for lc, segment, sections in self.helper.headers[0].commands:
+            if lc.cmd in (LC_SEGMENT, LC_SEGMENT_64) and segment.segname == INJECTION_SEGMENT_NAME:
+                injection_offset = segment.fileoff + segment.filesize
                 segment.filesize += len(asm)
                 if segment.filesize + len(asm) > segment.vmsize:
                     segment.vmsize += 0x1000
-                for section in segment.sections:
+                for section in sections:
                     if section.sectname == INJECTION_SECTION_NAME:
                         section.size += len(asm)
-                        section.data += asm
-
                         self.next_injection_vaddr = section.addr + section.size
-                        break
 
-            segment.write(self.binary)
-        for command in self.helper.commands:
-            command.write(self.binary)
+        self.helper.headers[0].write(self.binary)
+
+        self.binary.seek(injection_offset)
+        self.binary.write(asm)
 
         return injection_vaddr
 

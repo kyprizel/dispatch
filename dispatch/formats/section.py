@@ -38,12 +38,14 @@ def section_from_elf_section(elf_section):
 
 def section_from_macho_section(macho_section, macho_segment):
     s = Section()
-    s.name = macho_section.sectname
+    s.name = macho_section.sectname.rstrip('\x00')
     s.vaddr = macho_section.addr
     s.offset = macho_section.offset
     s.size = macho_section.size
-    s.raw = macho_section.data
-
+    if hasattr(macho_section, 'section_data'):
+        s.raw = macho_section.section_data
+    else:
+        s.raw = ''
     s.writable = bool(macho_segment.initprot & 0x2)
     s.executable = bool(macho_segment.initprot & 0x4)
 

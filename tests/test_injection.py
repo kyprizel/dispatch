@@ -2,7 +2,7 @@ import dispatch
 
 import logging, struct, sys
 
-if len(sys.argv) != 2:
+if len(sys.argv) != 3:
     print "Usage: {} input_binary output_binary".format(sys.argv[0])
     sys.exit(1)
 
