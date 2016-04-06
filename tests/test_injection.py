@@ -1,8 +1,8 @@
-from dispatch.formats import *
+import dispatch
 
 import logging, struct, sys
 
-if len(sys.argv) != 2:
+if len(sys.argv) != 3:
     print "Usage: {} input_binary output_binary".format(sys.argv[0])
     sys.exit(1)
 
@@ -10,7 +10,7 @@ if len(sys.argv) != 2:
 logging.basicConfig(level=logging.INFO)
 
 # Load in the executable with read_executable (pass filename)
-executable = read_executable(sys.argv[1])
+executable = dispatch.read_executable(sys.argv[1])
 
 # Invoke the analyzer to find functions
 executable.analyze()

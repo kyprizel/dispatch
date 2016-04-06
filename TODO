@@ -1,4 +1,2 @@
-* Tests
-* Fork pymacho instead of including it here
 * Improve x86 function analysis with flow analysis
 * Generators for common instructions for all platforms (NOP, jump, call)
