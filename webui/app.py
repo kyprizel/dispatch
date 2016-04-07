@@ -18,7 +18,11 @@ def function_list():
 @app.route('/function_info/<function_name>')
 def function_info(function_name):
     function = executable.function_named(function_name)
-    return json.dumps({'name':function.name,'address':function.address})
+    if function:
+        return json.dumps({'name':function.name,'address':function.address})
+    else:
+        print "Weird function requested", function_name, function
+        return "{}"
 
 @app.route('/dis/<function_name>')
 def get_disas(function_name):

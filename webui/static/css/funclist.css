@@ -11,8 +11,10 @@
 #functionlist {
     display: inline-block;
     float: left;
-    overflow: auto; /* display scrollbar when overflow happens */
+    overflow-y: auto; /* display scrollbar when overflow happens */
+    overflow-x: hidden;
     height: 100%;
+    max-width: 20%;
 }
 
 body {
