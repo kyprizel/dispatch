@@ -139,7 +139,7 @@ class Instruction(object):
                 if operand.type == Operand.IMM and operand.imm in self._executable.strings:
                     referenced_string = self._executable.strings[operand.imm]
                     op_strings[i] = referenced_string.short_name
-                    self.comment = referenced_string.string
+                    self.comment = referenced_string.string.strip()
 
         return ', '.join(op_strings)
 
@@ -260,7 +260,7 @@ def instruction_from_cs_insn(csInsn, executable):
 class String(object):
     def __init__(self, s, vaddr, executable):
         self.string = s
-        self.short_name = self.string.replace(' '+string.punctuation, '_')[:8]
+        self.short_name = reduce(lambda s, r: s.replace(r, ''), ' '+string.punctuation, self.string)[:8]
         self.vaddr = vaddr
         self._executable = executable
 

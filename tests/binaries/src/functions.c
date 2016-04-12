@@ -1,5 +1,8 @@
 #include <stdio.h>
 
+// To make Visual Studio happy ;)
+int mut_rec2(int);
+
 int add_two(int x) {
     return x + 2;
 }
