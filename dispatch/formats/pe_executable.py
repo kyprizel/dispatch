@@ -23,6 +23,8 @@ class PEExecutable(BaseExecutable):
 
         self.sections = [section_from_pe_section(s, self.helper) for s in self.helper.sections]
 
+        self.libraries = [dll.dll for dll in self.helper.DIRECTORY_ENTRY_IMPORT]
+
         self.next_injection_vaddr = 0
     
     def _identify_arch(self):
@@ -37,6 +39,9 @@ class PEExecutable(BaseExecutable):
             return ARCHITECTURE.MIPS
         else:
             return None
+
+    def entry_point(self):
+        return self.helper.OPTIONAL_HEADER.AddressOfEntryPoint
 
     def get_binary(self):
         return self.helper.write()
@@ -65,7 +70,6 @@ class PEExecutable(BaseExecutable):
         if hasattr(self.helper, 'DIRECTORY_ENTRY_EXPORT'):
             for symbol in self.helper.DIRECTORY_ENTRY_EXPORT.symbols:
                 if symbol.address not in self.functions:
-                    # TODO: Get size of function through CFG analysis or something similar
                     self.functions[symbol.address] = Function(symbol.address,
                                                               0,
                                                               symbol.name,

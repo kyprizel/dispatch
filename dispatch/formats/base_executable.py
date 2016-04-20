@@ -28,6 +28,7 @@ class BaseExecutable(object):
         self.helper = None
 
         self.analyzer = None
+        self.libraries = []
         self.functions = {} # Vaddr: Function
         self.strings = {}
         self.xrefs = {}

@@ -37,6 +37,8 @@ class MachOExecutable(BaseExecutable):
         self.executable_segment = [cmd for lc, cmd, _ in self.helper.headers[0].commands
                                    if lc.cmd in (LC_SEGMENT, LC_SEGMENT_64) and cmd.initprot & 0x4][0]
 
+        self.libraries = [fp.rstrip('\x00') for lc, cmd, fp in self.helper.headers[0].commands if lc.cmd == LC_LOAD_DYLIB]
+
         self.next_injection_vaddr = 0
 
     def _identify_arch(self):

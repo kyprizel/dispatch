@@ -29,6 +29,10 @@ class ELFExecutable(BaseExecutable):
 
         self.executable_segment = [s for s in self.helper.iter_segments() if s['p_type'] == 'PT_LOAD' and s['p_flags'] & 0x1][0]
 
+        dyn = self.helper.get_section_by_name('.dynamic')
+        if dyn:
+            self.libraries = [t.needed for t in dyn.iter_tags() if t['d_tag'] == 'DT_NEEDED']
+
         self.next_injection_offset = 0
         self.next_injection_vaddr = 0
 
@@ -248,6 +252,10 @@ class ELFExecutable(BaseExecutable):
         if injection_section['sh_size'] < INJECTION_SIZE or \
                         injection_section['sh_offset'] + injection_section['sh_size'] < self.next_injection_offset + len(asm):
             self._prepare_for_injection()
+        elif self.next_injection_offset == 0:
+            used_code_len = len(injection_section.data().rstrip('\xCC'))
+            self.next_injection_offset = injection_section['sh_offset'] + used_code_len
+            self.next_injection_vaddr = injection_section['sh_addr'] + used_code_len
 
         # "Inject" the assembly
         self.binary.seek(self.next_injection_offset)
@@ -256,7 +264,7 @@ class ELFExecutable(BaseExecutable):
         # Update e_entry if requested
         if update_entry:
             logging.debug('Rewriting ELF entry address to {}'.format(self.next_injection_vaddr))
-            elf_hdr = self.helper.header.copy()
+            elf_hdr = self.helper.header
             elf_hdr.e_entry = self.next_injection_vaddr
 
             self.binary.seek(0)
