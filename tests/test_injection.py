@@ -7,7 +7,7 @@ if len(sys.argv) != 3:
     sys.exit(1)
 
 
-logging.basicConfig(level=logging.INFO)
+logging.basicConfig(level=logging.DEBUG)
 
 # Load in the executable with read_executable (pass filename)
 executable = dispatch.read_executable(sys.argv[1])

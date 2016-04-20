@@ -1,5 +1,4 @@
 from elftools.elf.elffile import ELFFile
-from elftools.construct import Container
 from elftools.elf.enums import *
 from elftools.elf.constants import *
 from elftools.elf.sections import SymbolTableSection
@@ -8,8 +7,7 @@ import logging
 from .base_executable import *
 from .section import *
 
-INJECTION_SECTION_NAME = 'inject0'
-
+INJECTION_SIZE = 0x1000
 
 class ELFExecutable(BaseExecutable):
     def __init__(self, file_path):
@@ -31,6 +29,7 @@ class ELFExecutable(BaseExecutable):
 
         self.executable_segment = [s for s in self.helper.iter_segments() if s['p_type'] == 'PT_LOAD' and s['p_flags'] & 0x1][0]
 
+        self.next_injection_offset = 0
         self.next_injection_vaddr = 0
 
     def _identify_arch(self):
@@ -153,192 +152,122 @@ class ELFExecutable(BaseExecutable):
 
     def _prepare_for_injection(self):
         """
-        Overview of how this works:
-            We expand the main R/X LOAD segment to basically map all of the executable into memory including a new section
-            that we add to the very end of the binary. We can't create a new R/X LOAD segment because the segment header
-            table sits near the top of the executable and virtual addresses within the program are calculated based off
-            of the offset to the top of the binary (which would obviously change if we added in a segment header).
-
-        NOTES:
-            This is technically limited in the amount of data we can inject (since we'll eventually start clobbering
-            the PLT or things around there), but there's a generally around 0x200000 bytes between the main binary and
-            that so this shouldn't be an issue.
+        Derived from http://vxheavens.com/lib/vsc01.html
         """
-
         modified = StringIO(self.binary.getvalue())
 
-        # Some constants that will be used to determine if offsets need to be adjusted:
-
-        # End offset of section headers (i.e. where we'll inject our new section header)
-        sec_hdr_end = self.helper['e_shoff'] + self.helper['e_shentsize'] * self.helper['e_shnum']
-
-        # End of the section header string table (i.e. where we'll inject our new section header's name)
-        shstrtab_end = self.helper.get_section_by_name('.shstrtab')['sh_offset'] + self.helper.get_section_by_name('.shstrtab')['sh_size']
-
-        # Binary offset where the actual data will be
-        injection_offset = self.binary.len + self.helper['e_shentsize'] + len(INJECTION_SECTION_NAME) + 1
-
-
-        # Update number of section headers
+        # Add INJECTION_SIZE to the section header list offset to make room for our injected code
         elf_hdr = self.helper.header.copy()
-        elf_hdr.e_shnum += 1
-        logging.debug('Changing number of section headers to {}'.format(elf_hdr.e_shnum))
+        elf_hdr.e_shoff += INJECTION_SIZE
+        logging.debug('Changing e_shoff to {}'.format(elf_hdr.e_shoff))
 
         modified.seek(0)
         modified.write(self.helper.structs.Elf_Ehdr.build(elf_hdr))
 
+        # Find the main RX LOAD segment and also adjust other segment offsets along the way
+        executable_segment = None
 
-        # Adjust offsets for any sections after what we're about to add
-        for i in range(self.helper.num_sections()):
-            section = self.helper.get_section(i)
-            section_hdr = section.header.copy()
-            section_hdr_offset = self.helper._section_offset(i)
-
-            if section.header.sh_offset >= sec_hdr_end:
-                section_hdr.sh_offset += self.helper['e_shentsize']
-
-            if section.header.sh_offset >= shstrtab_end:
-                section_hdr.sh_offset += len(INJECTION_SECTION_NAME) + 1
-
-            if section.header.sh_offset != section_hdr.sh_offset:
-                logging.debug('Adjusting section {}\'s offset to {}'.format(i, section_hdr.sh_offset))
-
-            # Also update the shstrtab size if we find it
-            if section.name == '.shstrtab':
-                logging.debug('Found shstrtab at section index {} (offset {})'.format(i, section_hdr_offset))
-
-                section_hdr.sh_size += len(INJECTION_SECTION_NAME) + 1
-
-                logging.debug('Changing shstrtab size to {}'.format(section_hdr.sh_size))
-
-            modified.seek(section_hdr_offset)
-            modified.write(self.helper.structs.Elf_Shdr.build(section_hdr))
-
-
-        # Adjust offsets for any segments after what we're about to add
-        for i in range(self.helper.num_segments()):
-            segment = self.helper.get_segment(i)
+        for segment_idx, segment in enumerate(self.helper.iter_segments()):
             segment_hdr = segment.header.copy()
-            segment_hdr_offset = self.helper._segment_offset(i)
+            segment_hdr_offset = self.helper._segment_offset(segment_idx)
 
-            if segment_hdr.p_type == 'PT_LOAD' and segment_hdr.p_flags & P_FLAGS.PF_R and segment_hdr.p_flags & P_FLAGS.PF_X:
-                logging.debug('Found main R/X LOAD segment at index {}. Setting memsz and filesz to {}'.format(i, injection_offset))
-                segment_hdr.p_memsz = injection_offset
-                segment_hdr.p_filesz = injection_offset
+            if executable_segment is not None:
+                # Already past the executable segment, so just update the offset
+                segment_hdr.p_offset += INJECTION_SIZE
 
-            if segment.header.p_offset >= sec_hdr_end:
-                segment_hdr.p_offset += self.helper['e_shentsize']
+            elif segment['p_type'] == 'PT_LOAD' and segment['p_flags'] & P_FLAGS.PF_X:
+                # Found the executable LOAD segment.
+                # Make room for our injected code.
 
-            if segment.header.p_offset >= shstrtab_end:
-                segment_hdr.p_offset += len(INJECTION_SECTION_NAME) + 1
+                logging.debug('Found executable LOAD segment at index {}'.format(segment_idx))
+                executable_segment = segment
 
-            if segment.header.p_offset != segment_hdr.p_offset:
-                logging.debug('Adjusting segment {}\'s offset to {}'.format(i, segment_hdr.p_offset))
+                segment_hdr.p_filesz += INJECTION_SIZE
+                segment_hdr.p_memsz += INJECTION_SIZE
+
+                logging.debug('Rewriting segment filesize and memsize to {} and {}'.format(
+                    segment_hdr.p_filesz, segment_hdr.p_memsz)
+                )
 
             modified.seek(segment_hdr_offset)
             modified.write(self.helper.structs.Elf_Phdr.build(segment_hdr))
 
-        # At this point, the size of the file itself hasn't changed (i.e. nothing has been spliced in),
-        # offsets have just been incremented
+        if executable_segment is None:
+            logging.error("Could not locate an executable LOAD segment. Cannot continue injection.")
+            return False
 
-        new_sec_hdr = self.helper.structs.Elf_Shdr.build(
-            Container(sh_name=self.helper.get_section_by_name('.shstrtab')['sh_size'],
-                      sh_type=ENUM_SH_TYPE['SHT_PROGBITS'],
-                      sh_flags=SH_FLAGS.SHF_ALLOC | SH_FLAGS.SHF_EXECINSTR,
-                      sh_addr=self.executable_segment_vaddr() + injection_offset,
-                      sh_offset=injection_offset,
-                      sh_size=0,
-                      sh_link=0,
-                      sh_info=0,
-                      sh_addralign=16,
-                      sh_entsize=0))
+        last_exec_section_idx = max([idx for idx in range(self.helper.num_sections()) if
+                                     executable_segment.section_in_segment(self.helper.get_section(idx))])
+        last_exec_section = self.helper.get_section(last_exec_section_idx)
 
-        if shstrtab_end > sec_hdr_end:
-            # If the section header string table comes after the section headers themselves (seems to be non-standard)...
+        logging.debug('Last section in executable LOAD segment is at index {} ({})'.format(last_exec_section_idx,
+                                                                                           last_exec_section.name))
 
-            # Splice in section header
-            logging.debug('Adding in new section header at offset {}'.format(sec_hdr_end))
-            modified = StringIO(modified.getvalue()[:sec_hdr_end] + new_sec_hdr + modified.getvalue()[sec_hdr_end:])
+        self.next_injection_offset = last_exec_section['sh_offset'] + last_exec_section['sh_size']
+        self.next_injection_vaddr = last_exec_section['sh_addr'] + last_exec_section['sh_size']
 
-            # Account for the section we just added
-            shstrtab_end += self.helper['e_shentsize'] # Account for the section we will splice in
+        # Update sh_size for the section we grew
+        section_header_offset = self.helper._section_offset(last_exec_section_idx)
+        section_header = last_exec_section.header.copy()
 
-            # And add section name to shstrtab
-            logging.debug('Adding section header string table entry at offset {}'.format(shstrtab_end))
-            modified = StringIO(modified.getvalue()[:shstrtab_end] + INJECTION_SECTION_NAME + '\x00' + modified.getvalue()[shstrtab_end:])
+        section_header.sh_size += INJECTION_SIZE
 
-        else:
-            # If the section header string table comes before the section headers (seems to be standard)
+        modified.seek(section_header_offset)
+        modified.write(self.helper.structs.Elf_Shdr.build(section_header))
 
-            # Add section name to shstrtab
-            logging.debug('Adding section header string table entry at offset {}'.format(shstrtab_end))
-            modified = StringIO(modified.getvalue()[:shstrtab_end] + INJECTION_SECTION_NAME + '\x00' + modified.getvalue()[shstrtab_end:])
+        # Update sh_offset for each section past the last section in the executable segment
+        for section_idx in range(last_exec_section_idx + 1, self.helper.num_sections()):
+            section_header_offset = self.helper._section_offset(section_idx)
+            section_header = self.helper.get_section(section_idx).header.copy()
 
-            # Account for the section name we just added
-            sec_hdr_end += len(INJECTION_SECTION_NAME) + 1
+            section_header.sh_offset += INJECTION_SIZE
+            logging.debug('Rewriting section {}\'s offset to {}'.format(section_idx, section_header.sh_offset))
 
-            # Update e_shoff taking into account the string that we're going to insert
-            elf_hdr.e_shoff += len(INJECTION_SECTION_NAME) + 1
-            modified.seek(0)
-            modified.write(self.helper.structs.Elf_Ehdr.build(elf_hdr))
+            modified.seek(section_header_offset)
+            modified.write(self.helper.structs.Elf_Shdr.build(section_header))
 
-            # And splice in section header
-            logging.debug('Adding in new section header at offset {}'.format(sec_hdr_end))
-            modified = StringIO(modified.getvalue()[:sec_hdr_end] + new_sec_hdr + modified.getvalue()[sec_hdr_end:])
+        modified = StringIO(modified.getvalue()[:self.next_injection_offset] +
+                            '\xCC'*INJECTION_SIZE +
+                            modified.getvalue()[self.next_injection_offset:])
 
         self.binary = modified
         self.helper = ELFFile(self.binary)
 
+        return True
+
     def inject(self, asm, update_entry=False):
-        if self.helper.get_section_by_name(INJECTION_SECTION_NAME) is None:
-            self._prepare_for_injection()
-
-        # Update the main LOAD segment's memsz/filesz
-        for i in range(self.helper.num_segments()):
-            segment = self.helper.get_segment(i)
-            segment_hdr = segment.header.copy()
-            segment_hdr_offset = self.helper._segment_offset(i)
-
-            if segment_hdr.p_type == 'PT_LOAD' and segment_hdr.p_flags & P_FLAGS.PF_R and segment_hdr.p_flags & P_FLAGS.PF_X:
-                segment_hdr.p_memsz += len(asm)
-                segment_hdr.p_filesz += len(asm)
-
-                self.binary.seek(segment_hdr_offset)
-                self.binary.write(self.helper.structs.Elf_Phdr.build(segment_hdr))
-
+        for segment in self.helper.iter_segments():
+            if segment['p_type'] == 'PT_LOAD' and segment['p_flags'] & P_FLAGS.PF_X:
+                injection_section_idx = max(i for i in range(self.helper.num_sections()) if segment.section_in_segment(self.helper.get_section(i)))
                 break
 
-        # Update the section's size
-        section_idx = [i for i in range(self.helper.num_sections()) if self.helper.get_section(i).name == INJECTION_SECTION_NAME][0]
-        section_hdr_offset = self.helper._section_offset(section_idx)
-        section_to_inject = self.helper.get_section(section_idx)
+        injection_section = self.helper.get_section(injection_section_idx)
 
-        section_hdr = section_to_inject.header.copy()
-        section_hdr.sh_size += len(asm)
+        # If we haven't injected code before or need to expand the section again for this injection, go ahead and
+        # shift stuff around.
+        if injection_section['sh_size'] < INJECTION_SIZE or \
+                        injection_section['sh_offset'] + injection_section['sh_size'] < self.next_injection_offset + len(asm):
+            self._prepare_for_injection()
 
-        self.binary.seek(section_hdr_offset)
-        self.binary.write(self.helper.structs.Elf_Shdr.build(section_hdr))
-
-
-        injection_vaddr = section_to_inject['sh_addr'] + section_to_inject['sh_size']
-
-        # Write the new asm to the end of the file (i.e. the end of the inject section)
-        self.binary.seek(0, 2)
+        # "Inject" the assembly
+        self.binary.seek(self.next_injection_offset)
         self.binary.write(asm)
 
+        # Update e_entry if requested
         if update_entry:
-            logging.debug('Rewriting ELF entry address to {}'.format(injection_vaddr))
+            logging.debug('Rewriting ELF entry address to {}'.format(self.next_injection_vaddr))
             elf_hdr = self.helper.header.copy()
-            elf_hdr.e_entry = injection_vaddr
+            elf_hdr.e_entry = self.next_injection_vaddr
 
             self.binary.seek(0)
             self.binary.write(self.helper.structs.Elf_Ehdr.build(elf_hdr))
 
         self.helper = ELFFile(self.binary)
 
-        self.next_injection_vaddr = injection_vaddr + len(asm)
+        self.next_injection_vaddr += len(asm)
+        self.next_injection_offset += len(asm)
 
-        return injection_vaddr
+        return self.next_injection_vaddr - len(asm)
 
     def replace_instruction(self, old_ins, new_asm):
         if len(new_asm) > old_ins.size:
