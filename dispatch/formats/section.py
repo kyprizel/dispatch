@@ -55,7 +55,7 @@ def section_from_macho_section(macho_section, macho_segment):
 
 def section_from_pe_section(pe_section, pe):
     s = Section()
-    s.name = pe_section.Name
+    s.name = pe_section.Name.strip('\x00')
     s.vaddr = pe_section.VirtualAddress + pe.OPTIONAL_HEADER.ImageBase
     s.offset = pe_section.PointerToRawData
     s.size = pe_section.SizeOfRawData

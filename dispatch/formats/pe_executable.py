@@ -4,6 +4,8 @@ from .SectionDoubleP import SectionDoubleP
 from .base_executable import *
 from .section import *
 
+SECTION_SIZE = 0x1000
+
 class PEExecutable(BaseExecutable):
     def __init__(self, file_path):
         super(PEExecutable, self).__init__(file_path)
@@ -20,6 +22,8 @@ class PEExecutable(BaseExecutable):
         self.pack_endianness = '<'
 
         self.sections = [section_from_pe_section(s, self.helper) for s in self.helper.sections]
+
+        self.next_injection_vaddr = 0
     
     def _identify_arch(self):
         machine = pefile.MACHINE_TYPE[self.helper.FILE_HEADER.Machine]
@@ -38,8 +42,10 @@ class PEExecutable(BaseExecutable):
         return self.helper.write()
 
     def iter_string_sections(self):
-        # TODO
-        return []
+        STRING_SECTIONS = ['.rdata']
+        for s in self.sections:
+            if s.name in STRING_SECTIONS:
+                yield s
 
     def _extract_symbol_table(self):
         # Load in stuff from the IAT
@@ -67,23 +73,25 @@ class PEExecutable(BaseExecutable):
                 else:
                     self.functions[symbol.address].name = symbol.name
 
-    def inject(self, asm, update_entry=False):
-        SECTION_SIZE = 0x1000
+    def _prepare_for_injection(self):
+        sdp = SectionDoubleP(self.helper)
+        to_inject = '\x00' * SECTION_SIZE
+        self.helper = sdp.push_back(Name='.inject', Characteristics=0x60000020, Data=to_inject)
+        self.next_injection_vaddr = self.helper.sections[-1].VirtualAddress + self.helper.OPTIONAL_HEADER.ImageBase
 
-        has_injection_section = [s for s in self.helper.sections if s.Name == '.aio_inj']
+    def inject(self, asm, update_entry=False):
+        has_injection_section = [s for s in self.helper.sections if s.Name.startswith('.inject')]
 
         if not has_injection_section:
-            sdp = SectionDoubleP(self.helper)
-            to_inject = asm + '\x00' * (SECTION_SIZE - len(asm))
-            self.helper = sdp.push_back(Name='.aio_inj', Characteristics=0x60000020, Data=to_inject)
-            inject_rva = self.helper.sections[-1].VirtualAddress
-        else:
-            section = has_injection_section[0]
-            inject_rva = section.VirtualAddress + len(section.get_data().rstrip('\x00'))
-            section.set_bytes_at_rva(inject_rva, asm)
+            self._prepare_for_injection()
+
+        inject_rva = self.next_injection_vaddr - self.helper.OPTIONAL_HEADER.ImageBase
+        self.helper.set_bytes_at_rva(inject_rva, asm)
 
         if update_entry:
             self.helper.OPTIONAL_HEADER.AddressOfEntryPoint = inject_rva
+
+        self.next_injection_vaddr += len(asm)
 
         return inject_rva + self.helper.OPTIONAL_HEADER.ImageBase
 

@@ -67,6 +67,7 @@ class MachOExecutable(BaseExecutable):
         ordered_symbols = []
 
         symtab_command = self.helper.headers[0].getSymbolTableCommand()
+
         if symtab_command:
             self.binary.seek(symtab_command.stroff)
             symbol_strings = self.binary.read(symtab_command.strsize)
@@ -79,17 +80,18 @@ class MachOExecutable(BaseExecutable):
                 else:
                     symbol = nlist.from_fileobj(self.binary, _endian_=self.pack_endianness)
 
-                is_ext = symbol.n_type & 0x1 and symbol.n_value == 0
-
                 symbol_name = symbol_strings[symbol.n_un:].split('\x00')[0]
 
-                # Ignore Apple's hack for radar bug 5614542
-                if not is_ext and symbol_name != 'radr://5614542':
-                    size = 0
-                    logging.debug('Adding function {} from the symtab at vaddr {} with size {}'
-                                  .format(symbol_name, hex(symbol.n_value), hex(size)))
-                    f = Function(symbol.n_value, size, symbol_name, self)
-                    self.functions[symbol.n_value] = f
+                if symbol.n_type & N_STAB == 0:
+                    is_ext = symbol.n_type & N_EXT and symbol.n_value == 0
+
+                    # Ignore Apple's hack for radar bug 5614542
+                    if not is_ext and symbol_name != 'radr://5614542':
+                        size = 0
+                        logging.debug('Adding function {} from the symtab at vaddr {} with size {}'
+                                      .format(symbol_name, hex(symbol.n_value), hex(size)))
+                        f = Function(symbol.n_value, size, symbol_name, self)
+                        self.functions[symbol.n_value] = f
 
                 ordered_symbols.append(symbol_name)
 
@@ -103,9 +105,11 @@ class MachOExecutable(BaseExecutable):
             for lc, cmd, sections in self.helper.headers[0].commands:
                 if lc.cmd in (LC_SEGMENT, LC_SEGMENT_64) and cmd.initprot & 0x4:
                     for section in sections:
-                        if section.flags & S_NON_LAZY_SYMBOL_POINTERS \
-                            or section.flags & S_LAZY_SYMBOL_POINTERS \
-                            or section.flags & S_SYMBOL_STUBS:
+                        if section.flags & S_NON_LAZY_SYMBOL_POINTERS == S_NON_LAZY_SYMBOL_POINTERS \
+                            or section.flags & S_LAZY_SYMBOL_POINTERS == S_LAZY_SYMBOL_POINTERS \
+                            or section.flags & S_SYMBOL_STUBS == S_SYMBOL_STUBS:
+
+                            logging.debug('Parsing dynamic entries in {}.{}'.format(section.segname, section.sectname))
 
                             if section.flags & S_SYMBOL_STUBS:
                                 stride = section.reserved2
@@ -116,7 +120,13 @@ class MachOExecutable(BaseExecutable):
 
                             for i in range(count):
                                 addr = self.executable_segment.vmaddr + section.offset + (i * stride)
-                                symbol_name = ordered_symbols[sym_offsets[i + section.reserved1]]
+                                idx = sym_offsets[i + section.reserved1]
+                                if idx == 0x40000000:
+                                    symbol_name = "INDIRECT_SYMBOL_ABS"
+                                elif idx == 0x80000000:
+                                    symbol_name = "INDIRECT_SYMBOL_LOCAL"
+                                else:
+                                    symbol_name = ordered_symbols[idx]
                                 logging.debug('Adding function {} from the dynamic symtab at vaddr {} with size {}'
                                               .format(symbol_name, hex(addr), hex(stride)))
                                 f = Function(addr, stride, symbol_name, self, type=Function.DYNAMIC_FUNC)
