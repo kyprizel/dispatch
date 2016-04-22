@@ -1,6 +1,7 @@
 import capstone
 from capstone import *
 from capstone.x86_const import *
+import logging
 import struct
 
 from ..constructs import *
@@ -29,19 +30,47 @@ class X86_Analyzer(BaseAnalyzer):
                 or instruction.operands[0] in self.SP_REGS
 
     def _identify_functions(self):
-        STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0,1,2
+        """
+        This has to take into account 3 possibilities:
+
+        1) No symbols whatsoever. Here we basically end up just doing basic prologue/epilogue analysis and hoping that
+        the functions aren't weird and are relatively predictable.
+
+        2) Symbols with no size. We use the symbols we have as known starting points (replacing the prologue) but still
+        look for a epilogue (or the start of another function) to signal the end of the function.
+
+        3) Symbols with size.
+        """
+
+        STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0, 1, 2
 
         state = STATE_NOT_IN_FUNC
+
+        cur_func = None
 
         ops = []
 
         for addr in self.ins_map:
             cur_ins = self.ins_map[addr]
 
+            if addr in self.executable.functions:
+                state = STATE_IN_FUNCTION
+                cur_func = self.executable.functions[addr]
+
+                logging.debug('Analyzing function {} with pre-populated size {}'.format(cur_func, cur_func.size))
+
+                if not cur_func.size:
+                    # Function from symtab has no size, so start to keep track of it
+                    cur_func.size += cur_ins.size
+
+            elif cur_func and cur_func.contains_address(addr):
+                # Current function under analysis has a pre-populated size so just continue on until we get to the end
+                continue
+
             # Windows sometimes puts `mov edi, edi` as the first instruction in a function for hot patching, so we check
             # for this case to make sure the function we detect starts at the correct address.
             #  https://blogs.msdn.microsoft.com/oldnewthing/20110921-00/?p=9583
-            if state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'mov' and \
+            elif state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'mov' and \
                     cur_ins.operands[0].type == Operand.REG and \
                     cur_ins.operands[0].reg == X86_REG_EDI and \
                     cur_ins.operands[1].type == Operand.REG and \
@@ -64,28 +93,29 @@ class X86_Analyzer(BaseAnalyzer):
                             cur_ins.operands[1].type == Operand.REG and \
                             cur_ins.operands[1].reg in self.SP_REGS:
 
+
                 state = STATE_IN_FUNCTION
                 ops.append(cur_ins)
 
-            elif state == STATE_IN_FUNCTION and cur_ins.mnemonic.startswith('ret'):
-                state = STATE_NOT_IN_FUNC
-                ops.append(cur_ins)
-
-                if ops[0].address not in self.executable.functions:
-                    f = Function(ops[0].address,
-                                 ops[-1].address + ops[-1].size - ops[0].address,
-                                 'sub_'+hex(ops[0].address)[2:],
-                                 self.executable)
-                    self.executable.functions[f.address] = f
-                elif self.executable.functions[ops[0].address].size == 0:
-                    # If size was left blank from a symtab entry, fill it in with what we discovered
-                    f = self.executable.functions[ops[0].address]
-                    f.size = ops[-1].address + ops[-1].size - ops[0].address
-
+                logging.debug('Identified function by prologue at {} with prologue ops {}'.format(hex(addr), ops))
+                cur_func = Function(ops[0].address,
+                                    sum(i.size for i in ops),
+                                    'sub_'+hex(ops[0].address)[2:],
+                                    self.executable)
                 ops = []
 
+            elif state == STATE_IN_FUNCTION and 'ret' in cur_ins.mnemonic:
+                state = STATE_NOT_IN_FUNC
+                cur_func.size += cur_ins.size
+
+                logging.debug('Identified function epilogue at {}'.format(hex(addr)))
+
+                self.executable.functions[cur_func.address] = cur_func
+
+                cur_func = None
+
             elif state == STATE_IN_FUNCTION:
-                ops.append(cur_ins)
+                cur_func.size += cur_ins.size
 
 
     def cfg(self):

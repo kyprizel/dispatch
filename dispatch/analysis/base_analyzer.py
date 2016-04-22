@@ -142,6 +142,9 @@ class BaseAnalyzer(object):
 
         logging.info('Identifying functions')
         self._identify_functions()
+
+        # TODO: CFA
+
         logging.info('Populating function instructions')
         self._populate_func_instructions()
         logging.info('Identifying basic blocks')
