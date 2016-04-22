@@ -281,6 +281,9 @@ class CFGEdge(object):
     # Edge from a switch/jump table. One edge should be added for each entry, and the corresponding key set as the value
     SWITCH = 2
 
+    # Edge from a call instruction.
+    CALL = 3
+
     def __init__(self, src, dst, type, value=None):
         self.src = src
         self.dst = dst

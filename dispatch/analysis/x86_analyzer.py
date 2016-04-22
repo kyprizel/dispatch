@@ -98,7 +98,7 @@ class X86_Analyzer(BaseAnalyzer):
                     if ins.is_call() and ins.operands[-1].type == Operand.IMM:
                         call_addr = ins.operands[-1].imm
                         if self.executable.vaddr_is_executable(call_addr):
-                            edge = CFGEdge(ins.address, call_addr, CFGEdge.DEFAULT)
+                            edge = CFGEdge(ins.address, call_addr, CFGEdge.CALL)
                             edges.add(edge)
 
                 for cur_bb in f.bbs:
