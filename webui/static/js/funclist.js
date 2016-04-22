@@ -123,6 +123,7 @@ var divide_instructions = function() {
         'ax','bx','cx','dx','di','si','bp','sp','ip','r8w','r9w','r10w','r11w','r12w','r13w','r14w','r15w',          // 16-bit registers
         'eax','ebx','ecx','edx','edi','esi','ebp','esp','eip','r8d','r9d','r10d','r11d','r12d','r13d','r14d','r15d', // 32-bit registers
         'rax','rbx','rcx','rdx','rdi','rsi','rbp','rsp','rip','r8','r9','r10','r11','r12','r13','r14','r15',         // 64-bit registers
+        'st','st0', 'st1', 'st2', 'st3', 'st4', 'st5', 'st6', 'st7',                                                 // Floating point registers
         // TODO: ARM, MIPS, etc.
         ];
     var instruction_names = [
@@ -137,7 +138,9 @@ var divide_instructions = function() {
         'rcl','rcr','ret','retn','retf','rol','ror','sahf','sal','sar',
         'sbb','scasb','scasw','shl','shr','stc','std','sti','stosb',
         'stosw','sub','test','wait','xchg','xlat','xor', 'syscall',
-        'repne','leave',
+        'repne','leave', 'fld', 'fstp', 'fldcw', 'fldz', 'fxch', 'fucompi',
+        'fchs', 'fistp', 'fnstcw', 'fild', 'fsubrp', 'fmulp', 
+        'jns', 'js',
         // TODO: ARM, MIPS, etc.
         ];
     bbs.each(function(i, bb) {
