@@ -176,8 +176,10 @@ class ELFExecutable(BaseExecutable):
             segment_hdr_offset = self.helper._segment_offset(segment_idx)
 
             if executable_segment is not None:
-                # Already past the executable segment, so just update the offset
-                segment_hdr.p_offset += INJECTION_SIZE
+                # Already past the executable segment, so just update the offset if needed (i.e. don't update things
+                # that come before the expanded section)
+                if segment_hdr.p_offset > last_exec_section['sh_offset']:
+                    segment_hdr.p_offset += INJECTION_SIZE
 
             elif segment['p_type'] == 'PT_LOAD' and segment['p_flags'] & P_FLAGS.PF_X:
                 # Found the executable LOAD segment.
@@ -185,6 +187,10 @@ class ELFExecutable(BaseExecutable):
 
                 logging.debug('Found executable LOAD segment at index {}'.format(segment_idx))
                 executable_segment = segment
+
+                last_exec_section_idx = max([idx for idx in range(self.helper.num_sections()) if
+                                             executable_segment.section_in_segment(self.helper.get_section(idx))])
+                last_exec_section = self.helper.get_section(last_exec_section_idx)
 
                 segment_hdr.p_filesz += INJECTION_SIZE
                 segment_hdr.p_memsz += INJECTION_SIZE
@@ -199,10 +205,6 @@ class ELFExecutable(BaseExecutable):
         if executable_segment is None:
             logging.error("Could not locate an executable LOAD segment. Cannot continue injection.")
             return False
-
-        last_exec_section_idx = max([idx for idx in range(self.helper.num_sections()) if
-                                     executable_segment.section_in_segment(self.helper.get_section(idx))])
-        last_exec_section = self.helper.get_section(last_exec_section_idx)
 
         logging.debug('Last section in executable LOAD segment is at index {} ({})'.format(last_exec_section_idx,
                                                                                            last_exec_section.name))
