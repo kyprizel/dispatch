@@ -166,6 +166,6 @@ class BaseAnalyzer(object):
     def cfg(self):
         '''
         Creates a control flow graph for the binary
-        :return: List of tuples that describe the edges of the graph.
+        :return: List of CFGEdges that describe the edges of the graph.
         '''
         raise NotImplementedError()
