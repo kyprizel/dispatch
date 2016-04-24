@@ -27,10 +27,10 @@ class Trie(object):
             return node.value
 
         elif type(item) == slice:
-            uncommon_bits = (item.stop - item.start).bit_length()
+            uncommon_bits = (item.stop - item.start).bit_length() + 1
 
             node = self
-            for bit in [(item.start >> i) & 0x1 for i in range(64, uncommon_bits - 1, -1)]:
+            for bit in [(item.start >> i) & 0x1 for i in range(64, uncommon_bits, -1)]:
                 node = node.children[bit]
 
             return [v for v in iter(node) if item.start <= v.address < item.stop][::item.step]
