@@ -63,7 +63,7 @@ class X86_Analyzer(BaseAnalyzer):
 
         ops = []
 
-        for cur_ins in iter(self.ins_map):
+        for cur_ins in self.ins_map:
             if cur_ins.address in self.executable.functions:
                 state = STATE_IN_FUNCTION
                 cur_func = self.executable.functions[cur_ins.address]

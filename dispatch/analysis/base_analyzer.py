@@ -126,7 +126,7 @@ class BaseAnalyzer(object):
         Identify all the xrefs from the executable and store them in the xrefs dict (addr -> set of referencing addrs)
         :return: None
         '''
-        for ins in iter(self.ins_map):
+        for ins in self.ins_map:
             for operand in ins.operands:
                 if operand.type == Operand.IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
                     if operand.imm in self.executable.xrefs:
