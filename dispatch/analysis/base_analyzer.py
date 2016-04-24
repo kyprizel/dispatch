@@ -124,6 +124,10 @@ class BaseAnalyzer(object):
 
 
     def _mark_xrefs(self):
+        '''
+        Identify all the xrefs from the executable and store them in the xrefs dict (int -> set)
+        :return: None
+        '''
         for addr, ins in self.ins_map.iteritems():
             for operand in ins.operands:
                 if operand.type == Operand.IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
