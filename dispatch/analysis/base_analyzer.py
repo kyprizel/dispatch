@@ -81,6 +81,10 @@ class BaseAnalyzer(object):
                 self.executable.strings[vaddr] = String(found_string.group(), vaddr, self.executable)
 
     def _identify_bbs(self):
+        '''
+        Extracts all basic blocks from the executable and stores them in the associated function's bbs list
+        :return: None
+        '''
         for func in self.executable.iter_functions():
             if func.instructions:
                 bb_ends = set([func.instructions[-1].address + func.instructions[-1].size])
