@@ -19,7 +19,7 @@ class Trie(object):
         self.__setitem__(address, value)
 
     def __getitem__(self, item):
-        if type(item) == int:
+        if type(item) in (int, long):
             node = self
             for bit in [(item >> i) & 0x1 for i in range(64, -1, -1)]:
                 node = node.children[bit]
