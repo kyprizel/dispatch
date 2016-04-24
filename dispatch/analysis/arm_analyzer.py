@@ -48,6 +48,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
         bb_disasm_mode[entry] = initial_mode
 
+        # TODO: make this much cleaner, not use raw mnemonic checks, etc
         while not to_analyze.empty():
             start_vaddr, mode = to_analyze.get()
 
