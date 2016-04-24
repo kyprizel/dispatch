@@ -283,7 +283,7 @@ class ELFExecutable(BaseExecutable):
         if not self.analyzer.ins_map[vaddr]:
             raise Exception('Starting virtual address to replace must be an existing instruction')
 
-        overwritten_insns = [ins for ins in iter(self.analyzer.ins_map) if vaddr <= ins.address < vaddr+len(new_asm)]
+        overwritten_insns = self.analyzer.ins_map[vaddr:vaddr+len(new_asm)]
         for ins in overwritten_insns:
             if ins.address in self.xrefs:
                 logging.warning('{} will be overwritten but there are xrefs to it: {}'.format(ins,
