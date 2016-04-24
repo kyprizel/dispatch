@@ -125,7 +125,7 @@ class BaseAnalyzer(object):
 
     def _mark_xrefs(self):
         '''
-        Identify all the xrefs from the executable and store them in the xrefs dict (int -> set)
+        Identify all the xrefs from the executable and store them in the xrefs dict (addr -> set of referencing addrs)
         :return: None
         '''
         for addr, ins in self.ins_map.iteritems():
