@@ -22,6 +22,7 @@ class ARM_Analyzer(BaseAnalyzer):
         self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.arm_const.__dict__.iteritems() if k.startswith('ARM_REG')])
         self.IP_REGS = set([11])
         self.SP_REGS = set([12])
+        self.NOP_INSTRUCTION = '\x00\x00\x00\x00'
 
     def _gen_ins_map(self):
         # Again, since ARM binaries can have code using both instruction sets, we basically have to make a CFG and
@@ -145,7 +146,23 @@ class ARM_Analyzer(BaseAnalyzer):
             for ins in self._disassembler.disasm(code, bb_start):
                 if ins.id: # .byte "instructions" have an id of 0
                     self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
-        
+
+    def disassemble_range(self, start_vaddr, end_vaddr):
+        if start_vaddr & 0x1:
+            self._disassembler.mode = CS_MODE_THUMB
+        else:
+            self._disassembler.mode = CS_MODE_ARM
+
+        size = end_vaddr - start_vaddr
+        self.executable.binary.seek(self.executable.vaddr_binary_offset(start_vaddr))
+
+        instructions = []
+
+        for ins in self._disassembler.disasm(self.executable.binary.read(size), start_vaddr):
+            if ins.id:
+                instructions.append(instruction_from_cs_insn(ins, self.executable))
+
+        return instructions
 
 class ARM_64_Analyzer(ARM_Analyzer):
     def __init__(self, executable):
@@ -162,3 +179,4 @@ class ARM_64_Analyzer(ARM_Analyzer):
         self.REGISTER_NAMES = dict([(v,k[10:].lower()) for k,v in capstone.arm64_const.__dict__.iteritems() if k.startswith('ARM64_REG')])
         self.IP_REGS = set()
         self.SP_REGS = set([4, 5])
+        self.NOP_INSTRUCTION = '\x1F\x20\x03\xD5'

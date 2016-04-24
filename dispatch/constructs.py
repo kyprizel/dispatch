@@ -25,6 +25,43 @@ class Function(object):
     
     def __repr__(self):
         return '<Function \'{}\' at {}>'.format(self.name, hex(self.address))
+
+    def do_bb_analysis(self):
+        if self.instructions:
+            bb_ends = set([self.instructions[-1].address + self.instructions[-1].size])
+
+            for i in range(len(self.instructions) - 1):
+                cur = self.instructions[i]
+                next = self.instructions[i + 1]
+
+                if cur.is_jump() and cur.operands[0].type == Operand.IMM:
+                    bb_ends.add(cur.operands[0].imm)
+                    bb_ends.add(next.address)
+
+            bb_ends = sorted(list(bb_ends))
+            bb_instructions = []
+
+            for ins in self.instructions:
+                if ins.address == bb_ends[0] and bb_instructions:
+                    bb = BasicBlock(self,
+                                    bb_instructions[0].address,
+                                    bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
+                    bb.instructions = bb_instructions
+                    self.bbs.append(bb)
+
+                    bb_ends = bb_ends[1:]
+                    bb_instructions = [ins]
+                else:
+                    bb_instructions.append(ins)
+
+            # There will always be one BB left over which "ends" at the first address of the next function, so be
+            # sure to add it
+
+            bb = BasicBlock(self,
+                            bb_instructions[0].address,
+                            bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
+            bb.instructions = bb_instructions
+            self.bbs.append(bb)
     
     def contains_address(self, address):
         return self.address <= address < self.address + self.size

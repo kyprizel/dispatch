@@ -1,7 +1,7 @@
 import logging
 import re
 import string
-from collections import OrderedDict
+from ..util.trie import Trie
 
 from ..constructs import *
 
@@ -15,10 +15,8 @@ class BaseAnalyzer(object):
     '''
     def __init__(self, executable):
         self.executable = executable
-        
-        # Dictionary of vaddr: instruction for quick lookups.
-        # We use an OrderedDict so we can just `for addr in ins_map` and not have to worry about sorting
-        self.ins_map = OrderedDict()
+
+        self.ins_map = Trie()
     
     def __repr__(self):
         return '<{} for {} {} \'{}\'>'.format(self.__class__.__name__,
@@ -40,6 +38,15 @@ class BaseAnalyzer(object):
         '''
         raise NotImplementedError()
 
+    def disassemble_range(self, start_vaddr, end_vaddr):
+        '''
+        Return an array of instructions disassembled between start and end
+        :param start_vaddr: The virtual address to start disassembly at
+        :param end_vaddr: The last virtual address to disassemble
+        :return: Array of disassembled instructions
+        '''
+        raise NotImplementedError()
+
     def _identify_functions(self):
         '''
         Iterates through instructions and identifies functions by prologues and epilogues
@@ -52,7 +59,7 @@ class BaseAnalyzer(object):
         Iterates through all found functions and add instructions inside that function to the Function object
         :return: None
         '''
-        insn_addrs = sorted(self.ins_map.keys())
+        insn_addrs = [ins.address for ins in iter(self.ins_map)]
 
         for f in self.executable.iter_functions():
             try:
@@ -128,13 +135,13 @@ class BaseAnalyzer(object):
         Identify all the xrefs from the executable and store them in the xrefs dict (addr -> set of referencing addrs)
         :return: None
         '''
-        for addr, ins in self.ins_map.iteritems():
+        for ins in iter(self.ins_map):
             for operand in ins.operands:
                 if operand.type == Operand.IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
                     if operand.imm in self.executable.xrefs:
-                        self.executable.xrefs[operand.imm].add(addr)
+                        self.executable.xrefs[operand.imm].add(ins.address)
                     else:
-                        self.executable.xrefs[operand.imm] = set([addr])
+                        self.executable.xrefs[operand.imm] = set([ins.address])
 
     def analyze(self):
         '''
@@ -156,7 +163,8 @@ class BaseAnalyzer(object):
         logging.info('Populating function instructions')
         self._populate_func_instructions()
         logging.info('Identifying basic blocks')
-        self._identify_bbs()
+        for func in self.executable.iter_functions():
+            func.do_bb_analysis()
         logging.info('Marking XRefs')
         self._mark_xrefs()
 

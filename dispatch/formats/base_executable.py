@@ -170,7 +170,7 @@ class BaseExecutable(object):
         if self.analyzer:
             self.analyzer.analyze()
         else:
-            logging.warning('Could not create analyzer for {}'.format(self))
+            logging.error('Could not create analyzer for {}'.format(self))
 
         return self.analyzer
 

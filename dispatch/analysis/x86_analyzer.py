@@ -18,12 +18,25 @@ class X86_Analyzer(BaseAnalyzer):
         self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.x86_const.__dict__.iteritems() if k.startswith('X86_REG')])
         self.IP_REGS = set([26, 34, 41])
         self.SP_REGS = set([30, 44, 47])
+        self.NOP_INSTRUCTION = '\x90'
 
     def _gen_ins_map(self):
         for section in self.executable.sections_to_disassemble():
             for ins in self._disassembler.disasm(section.raw, section.vaddr):
                 if ins.id: # .byte "instructions" have an id of 0
                     self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
+
+    def disassemble_range(self, start_vaddr, end_vaddr):
+        size = end_vaddr - start_vaddr
+        self.executable.binary.seek(self.executable.vaddr_binary_offset(start_vaddr))
+
+        instructions = []
+
+        for ins in self._disassembler.disasm(self.executable.binary.read(size), start_vaddr):
+            if ins.id:
+                instructions.append(instruction_from_cs_insn(ins, self.executable))
+
+        return instructions
 
     def ins_modifies_esp(self, instruction):
         return 'pop' in instruction.mnemonic or 'push' in instruction.mnemonic \
@@ -50,12 +63,10 @@ class X86_Analyzer(BaseAnalyzer):
 
         ops = []
 
-        for addr in self.ins_map:
-            cur_ins = self.ins_map[addr]
-
-            if addr in self.executable.functions:
+        for cur_ins in iter(self.ins_map):
+            if cur_ins.address in self.executable.functions:
                 state = STATE_IN_FUNCTION
-                cur_func = self.executable.functions[addr]
+                cur_func = self.executable.functions[cur_ins.address]
 
                 logging.debug('Analyzing function {} with pre-populated size {}'.format(cur_func, cur_func.size))
 
@@ -63,7 +74,7 @@ class X86_Analyzer(BaseAnalyzer):
                     # Function from symtab has no size, so start to keep track of it
                     cur_func.size += cur_ins.size
 
-            elif cur_func and cur_func.contains_address(addr):
+            elif cur_func and cur_func.contains_address(cur_ins.address):
                 # Current function under analysis has a pre-populated size so just continue on until we get to the end
                 continue
 
@@ -97,7 +108,7 @@ class X86_Analyzer(BaseAnalyzer):
                 state = STATE_IN_FUNCTION
                 ops.append(cur_ins)
 
-                logging.debug('Identified function by prologue at {} with prologue ops {}'.format(hex(addr), ops))
+                logging.debug('Identified function by prologue at {} with prologue ops {}'.format(hex(cur_ins.address), ops))
                 cur_func = Function(ops[0].address,
                                     sum(i.size for i in ops),
                                     'sub_'+hex(ops[0].address)[2:],
@@ -108,7 +119,7 @@ class X86_Analyzer(BaseAnalyzer):
                 state = STATE_NOT_IN_FUNC
                 cur_func.size += cur_ins.size
 
-                logging.debug('Identified function epilogue at {}'.format(hex(addr)))
+                logging.debug('Identified function epilogue at {}'.format(hex(cur_ins.address)))
 
                 self.executable.functions[cur_func.address] = cur_func
 
@@ -175,7 +186,7 @@ class X86_Analyzer(BaseAnalyzer):
                             instructions[3].operands[1].type == Operand.MEM and \
                         instructions[4].mnemonic == 'jmp' and \
                             instructions[4].operands[0].type == Operand.REG and \
-                            instructions[4].operands[0].reg ==  instructions[3].operands[0].reg:
+                            instructions[4].operands[0].reg == instructions[3].operands[0].reg:
 
                         num_cases = instructions[0].operands[1].imm
                         addr_size = instructions[3].operands[1].scale

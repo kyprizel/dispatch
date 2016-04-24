@@ -6,7 +6,7 @@ setup(
     author='NYU OSIRIS Lab',
     url='https://github.com/isislab/dispatch',
     description='Programmatic disassembly and patching from NYU\'s OSIRIS lab',
-    packages=['dispatch', 'dispatch.formats', 'dispatch.analysis'],
+    packages=['dispatch', 'dispatch.util', 'dispatch.formats', 'dispatch.analysis'],
     install_requires=[
         'pyelftools==0.23',
         'pefile==1.2.10.post114',

@@ -1,4 +1,4 @@
 * Improve x86 function analysis with flow analysis
-* Generators for common instructions for all platforms (NOP, jump, call)
+* Generators for common instructions for all platforms (jump, call)
 * Shift to having a single mmap backed instance of the binary with everything providing views into that data
 * ARM analysis
