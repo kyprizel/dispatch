@@ -59,17 +59,8 @@ class BaseAnalyzer(object):
         Iterates through all found functions and add instructions inside that function to the Function object
         :return: None
         '''
-        insn_addrs = [ins.address for ins in iter(self.ins_map)]
-
         for f in self.executable.iter_functions():
-            try:
-                i = insn_addrs.index(f.address)
-
-                while i < len(insn_addrs) and insn_addrs[i] < f.address + f.size:
-                    f.instructions.append(self.ins_map[insn_addrs[i]])
-                    i += 1
-            except ValueError:
-                logging.debug('Function {} starts at code outside any executable section.'.format(f))
+            f.instructions = self.ins_map[f.address : f.address+f.size]
 
     def _identify_strings(self):
         '''
