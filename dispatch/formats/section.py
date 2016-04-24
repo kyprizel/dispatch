@@ -3,18 +3,18 @@ class Section(object):
     Represents a section from an executable. All common executable formats have nearly the exact same idea of a
     section, so we just put it into a unified class for easy, consistent access
     '''
+    def __init__(self):
+        self.name = ''
+        self.vaddr = 0
+        self.offset = 0
+        self.size = 0
+        self.raw = None
 
-    name = ''
-    vaddr = 0
-    offset = 0
-    size = 0
-    raw = None
+        self.readable = False
+        self.writable = False
+        self.executable = False
 
-    readable = False
-    writable = False
-    executable = False
-
-    orig_section = None
+        self.orig_section = None
 
     def __repr__(self):
         return '<Section {} at vaddr {}>'.format(self.name, hex(self.vaddr))
