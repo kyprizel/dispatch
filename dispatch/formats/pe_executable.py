@@ -56,18 +56,19 @@ class PEExecutable(BaseExecutable):
                 yield s
 
     def _extract_symbol_table(self):
-        # Load in stuff from the IAT
-        for dll in self.helper.DIRECTORY_ENTRY_IMPORT:
-            for imp in dll.imports:
-                if imp.name:
-                    name = imp.name + '@' + dll.dll
-                else:
-                    name = 'ordinal_' + str(imp.ordinal) + '@' + dll.dll
+        # Load in stuff from the IAT if it exists
+        if hasattr(self.helper, 'DIRECTORY_ENTRY_IMPORT'):
+            for dll in self.helper.DIRECTORY_ENTRY_IMPORT:
+                for imp in dll.imports:
+                    if imp.name:
+                        name = imp.name + '@' + dll.dll
+                    else:
+                        name = 'ordinal_' + str(imp.ordinal) + '@' + dll.dll
 
-                self.functions[imp.address] = Function(imp.address,
-                                                       self.address_length(),
-                                                       name,
-                                                       self)
+                    self.functions[imp.address] = Function(imp.address,
+                                                           self.address_length(),
+                                                           name,
+                                                           self)
 
         # Load in information from the EAT if it exists
         if hasattr(self.helper, 'DIRECTORY_ENTRY_EXPORT'):
