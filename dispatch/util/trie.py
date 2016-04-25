@@ -48,11 +48,9 @@ class Trie(object):
     def __iter__(self):
         if self.value:
             yield self.value
-
-        for i in range(len(self.children)):
-            if self.children[i]:
-                for v in self.children[i]:
-                    yield v
+        for child in filter(None, self.children):
+            for v in child:
+                yield v
 
     def __contains__(self, item):
         node = self
