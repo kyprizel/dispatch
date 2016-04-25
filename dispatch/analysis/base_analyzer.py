@@ -60,7 +60,13 @@ class BaseAnalyzer(object):
         :return: None
         '''
         for f in self.executable.iter_functions():
-            f.instructions = self.ins_map[f.address : f.address+f.size]
+            # some formats (such as macho) have special functions
+            # that don't actually exist in the binary. They have a
+            # size of 0, so let's ignore them.
+            if f.size != 0:
+                f.instructions = self.ins_map[f.address : f.address+f.size]
+            else:
+                f.instructions = []
 
     def _identify_strings(self):
         '''
