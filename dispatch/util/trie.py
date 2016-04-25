@@ -2,7 +2,7 @@ from ..constructs import Instruction
 
 class Trie(object):
     BUCKET_LEN = 1
-    BUCKET_MASK = 0b1
+    BUCKET_MASK = (2**BUCKET_LEN)-1
     def __init__(self):
         self.children = [None for _ in range(2**Trie.BUCKET_LEN)]
         self.value = None
