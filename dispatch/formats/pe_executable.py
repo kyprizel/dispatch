@@ -23,7 +23,10 @@ class PEExecutable(BaseExecutable):
 
         self.sections = [section_from_pe_section(s, self.helper) for s in self.helper.sections]
 
-        self.libraries = [dll.dll for dll in self.helper.DIRECTORY_ENTRY_IMPORT]
+        if hasattr(self.helper, 'DIRECTORY_ENTRY_IMPORT'):
+            self.libraries = [dll.dll for dll in self.helper.DIRECTORY_ENTRY_IMPORT]
+        else:
+            self.libraries = []
 
         self.next_injection_vaddr = 0
     
