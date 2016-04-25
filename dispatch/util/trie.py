@@ -46,6 +46,14 @@ class Trie(object):
                 for v in self.children[i]:
                     yield v
 
+    def __contains__(self, item):
+        node = self
+        for bit in [(item >> i) & 0x1 for i in range(64, -1, -1)]:
+            if not node.children[bit]:
+                return False
+            node = node.children[bit]
+        return True
+
     def __delitem__(self, key):
         node = self
         for bit in [(key >> i) & 0x1 for i in range(64, -1, -1)]:

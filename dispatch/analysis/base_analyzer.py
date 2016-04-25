@@ -61,9 +61,8 @@ class BaseAnalyzer(object):
         '''
         for f in self.executable.iter_functions():
             # some formats (such as macho) have special functions
-            # that don't actually exist in the binary. They have a
-            # size of 0, so let's ignore them.
-            if f.size != 0:
+            # that don't actually exist in the binary, so we ignore them
+            if f.address in self.ins_map:
                 f.instructions = self.ins_map[f.address : f.address+f.size]
             else:
                 f.instructions = []
