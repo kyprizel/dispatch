@@ -11,9 +11,8 @@ class Trie(object):
         assert type(value) == Instruction
 
         node = self
-        for bucket in \
-                [(key >> i) & Trie.BUCKET_MASK for \
-                 i in range(64, -1, -Trie.BUCKET_LEN)]:
+        for bucket in [(key >> i) & Trie.BUCKET_MASK for \
+                       i in range(64, -1, -Trie.BUCKET_LEN)]:
             if not node.children[bucket]:
                 node.children[bucket] = Trie()
             node = node.children[bucket]
@@ -23,9 +22,8 @@ class Trie(object):
     def __getitem__(self, item):
         if type(item) in (int, long):
             node = self
-            for bucket in \
-                    [(item >> i) & Trie.BUCKET_MASK for \
-                     i in range(64, -1, -Trie.BUCKET_LEN)]:
+            for bucket in [(item >> i) & Trie.BUCKET_MASK for \
+                           i in range(64, -1, -Trie.BUCKET_LEN)]:
                 if not node.children[bucket]:
                     raise KeyError()
                 node = node.children[bucket]
@@ -36,9 +34,8 @@ class Trie(object):
             uncommon_bits = (item.stop - item.start).bit_length() + 1
 
             node = self
-            for bucket in \
-                    [(item.start >> i) & Trie.BUCKET_MASK \
-                     for i in range(64, uncommon_bits, -Trie.BUCKET_LEN)]:
+            for bucket in [(item.start >> i) & Trie.BUCKET_MASK for \
+                           i in range(64, uncommon_bits, -Trie.BUCKET_LEN)]:
                 if not node.children[bucket]:
                     raise KeyError()
                 node = node.children[bucket]
@@ -54,9 +51,8 @@ class Trie(object):
 
     def __contains__(self, item):
         node = self
-        for bucket in \
-                [(item >> i) & Trie.BUCKET_MASK for \
-                i in range(64, -1, -Trie.BUCKET_LEN)]:
+        for bucket in [(item >> i) & Trie.BUCKET_MASK for \
+                       i in range(64, -1, -Trie.BUCKET_LEN)]:
             if not node.children[bucket]:
                 return False
             node = node.children[bucket]
@@ -64,9 +60,8 @@ class Trie(object):
 
     def __delitem__(self, key):
         node = self
-        for bucket in \
-                [(key >> i) & Trie.BUCKET_MASK \
-                 for i in range(64, -1, -Trie.BUCKET_LEN)]:
+        for bucket in [(key >> i) & Trie.BUCKET_MASK for \
+                       i in range(64, -1, -Trie.BUCKET_LEN)]:
             if not node.children[bucket]:
                 raise KeyError()
             node = node.children[bucket]
