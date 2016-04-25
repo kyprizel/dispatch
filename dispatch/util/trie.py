@@ -1,28 +1,34 @@
 from ..constructs import Instruction
 
 class Trie(object):
+    BUCKET_LEN = 1
+    BUCKET_MASK = 0b1
     def __init__(self):
-        self.children = [None, None]
+        self.children = [None for _ in range(2**Trie.BUCKET_LEN)]
         self.value = None
 
     def __setitem__(self, key, value):
         assert type(value) == Instruction
 
         node = self
-        for bit in [(key >> i) & 0x1 for i in range(64, -1, -1)]:
-            if not node.children[bit]:
-                node.children[bit] = Trie()
-            node = node.children[bit]
+        for bucket in \
+                [(key >> i) & Trie.BUCKET_MASK for \
+                 i in range(64, -1, -Trie.BUCKET_LEN)]:
+            if not node.children[bucket]:
+                node.children[bucket] = Trie()
+            node = node.children[bucket]
 
         node.value = value
 
     def __getitem__(self, item):
         if type(item) in (int, long):
             node = self
-            for bit in [(item >> i) & 0x1 for i in range(64, -1, -1)]:
-                if not node.children[bit]:
+            for bucket in \
+                    [(item >> i) & Trie.BUCKET_MASK for \
+                     i in range(64, -1, -Trie.BUCKET_LEN)]:
+                if not node.children[bucket]:
                     raise KeyError()
-                node = node.children[bit]
+                node = node.children[bucket]
 
             return node.value
 
@@ -30,10 +36,12 @@ class Trie(object):
             uncommon_bits = (item.stop - item.start).bit_length() + 1
 
             node = self
-            for bit in [(item.start >> i) & 0x1 for i in range(64, uncommon_bits, -1)]:
-                if not node.children[bit]:
+            for bucket in \
+                    [(item.start >> i) & Trie.BUCKET_MASK \
+                     for i in range(64, uncommon_bits, -Trie.BUCKET_LEN)]:
+                if not node.children[bucket]:
                     raise KeyError()
-                node = node.children[bit]
+                node = node.children[bucket]
 
             return [v for v in iter(node) if item.start <= v.address < item.stop][::item.step]
 
@@ -48,18 +56,22 @@ class Trie(object):
 
     def __contains__(self, item):
         node = self
-        for bit in [(item >> i) & 0x1 for i in range(64, -1, -1)]:
-            if not node.children[bit]:
+        for bucket in \
+                [(item >> i) & Trie.BUCKET_MASK for \
+                i in range(64, -1, -Trie.BUCKET_LEN)]:
+            if not node.children[bucket]:
                 return False
-            node = node.children[bit]
+            node = node.children[bucket]
         return True
 
     def __delitem__(self, key):
         node = self
-        for bit in [(key >> i) & 0x1 for i in range(64, -1, -1)]:
-            if not node.children[bit]:
+        for bucket in \
+                [(key >> i) & Trie.BUCKET_MASK \
+                 for i in range(64, -1, -Trie.BUCKET_LEN)]:
+            if not node.children[bucket]:
                 raise KeyError()
-            node = node.children[bit]
+            node = node.children[bucket]
 
         if node.value:
             del node.value
