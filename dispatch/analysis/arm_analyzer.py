@@ -37,7 +37,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
         entry = self.executable.entry_point()
 
-        if entry & 0x1:
+        if entry & 0b1:
             initial_mode = CS_MODE_THUMB
         else:
             initial_mode = CS_MODE_ARM
@@ -74,10 +74,14 @@ class ARM_Analyzer(BaseAnalyzer):
                 elif ins.address in known_ends:  # At a constants table, so we know we're at the end of a bb/function
                     break
 
-                # TODO: epilogue detection
+                our_ins = instruction_from_cs_insn(ins, self.executable)
+                self.ins_map[ins.address] = our_ins
+
+                if self._insn_is_epilogue(our_ins):
+                    break
 
                 # Branch immediate
-                elif 'b' in ins.mnemonic and ins.operands[-1].type == CS_OP_IMM:
+                if ins.mnemonic.startswith('b') and ins.operands[-1].type == CS_OP_IMM:
                     jump_dst = ins.operands[-1].imm
 
                     if self.executable.vaddr_is_executable(jump_dst) and jump_dst not in bb_disasm_mode:
@@ -99,8 +103,8 @@ class ARM_Analyzer(BaseAnalyzer):
                     if ins.operands[-1].type == CS_OP_IMM and self.executable.vaddr_is_executable(ins.operands[-1].imm):
                         referenced_addr = ins.operands[-1].imm
                         if referenced_addr not in bb_disasm_mode:
-                            logging.debug('Found reference to address {} in instruction at {}'
-                                          .format(hex(int(jump_dst)), hex(int(ins.address))))
+                            logging.debug('Found reference to executable address {} in instruction at {}'
+                                          .format(hex(int(referenced_addr)), hex(int(ins.address))))
 
                             next_mode = CS_MODE_THUMB if referenced_addr & 0x1 else CS_MODE_ARM
                             referenced_addr &= ~0b1
@@ -128,7 +132,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
                         if self.executable.vaddr_is_executable(referenced_addr):
                             logging.debug('Found reference to address {} through const table at {} in instruction at {}'
-                                              .format(hex(int(referenced_addr)), hex(int(ptr)), hex(int(ins.address))))
+                                          .format(hex(int(referenced_addr)), hex(int(ptr)), hex(int(ins.address))))
 
                             if referenced_addr not in bb_disasm_mode:
                                 next_mode = CS_MODE_THUMB if referenced_addr & 0x1 else CS_MODE_ARM
@@ -136,22 +140,15 @@ class ARM_Analyzer(BaseAnalyzer):
                                 bb_disasm_mode[referenced_addr] = next_mode
                                 to_analyze.put((referenced_addr, next_mode, ))
 
-        bb_vaddrs = sorted(bb_disasm_mode.keys())
-
-        for bb_start, bb_end in zip(bb_vaddrs[:-1], bb_vaddrs[1:]):
-            code = self.executable.get_binary_vaddr_range(bb_start, bb_end)
-
-            self._disassembler.mode = bb_disasm_mode[bb_start]
-
-            for ins in self._disassembler.disasm(code, bb_start):
-                if ins.id: # .byte "instructions" have an id of 0
-                    self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
+        self._disasm_mode = bb_disasm_mode
 
     def disassemble_range(self, start_vaddr, end_vaddr):
         if start_vaddr & 0x1:
             self._disassembler.mode = CS_MODE_THUMB
         else:
             self._disassembler.mode = CS_MODE_ARM
+
+        start_vaddr &= ~0b1
 
         size = end_vaddr - start_vaddr
         self.executable.binary.seek(self.executable.vaddr_binary_offset(start_vaddr))
@@ -164,8 +161,78 @@ class ARM_Analyzer(BaseAnalyzer):
 
         return instructions
 
+    def _insn_is_epilogue(self, ins):
+        """
+        Determines whether the instruction is a typical function epilogue
+        :param ins: Instruction to test
+        :return: True if the instruction is an epilogue
+        """
+
+        # b** {..., lr}
+        if ins.mnemonic.startswith('b') and ins.operands[0].type == Operand.REG and \
+            ins.operands[0].reg == ARM_REG_LR:
+            return True
+
+        # pop {..., pc}
+        elif ins.mnemonic == 'pop' and \
+            any(o.reg == ARM_REG_PC for o in ins.operands if o.type == Operand.REG):
+            return True
+
+        return False
+
     def _identify_functions(self):
-        pass
+        STATE_NOT_IN_FUNC, STATE_IN_FUNCTION = 0, 1
+
+        state = STATE_NOT_IN_FUNC
+
+        cur_func = None
+
+        for cur_ins in self.ins_map:
+            if cur_ins.address in self.executable.functions:
+                state = STATE_IN_FUNCTION
+                cur_func = self.executable.functions[cur_ins.address]
+
+                logging.debug('Analyzing function {} with pre-populated size {}'.format(cur_func, cur_func.size))
+
+                if not cur_func.size:
+                    # Function from symtab has no size, so start to keep track of it
+                    cur_func.size += cur_ins.size
+
+            elif cur_func and cur_func.contains_address(cur_ins.address):
+                # ARM sometimes stores pointers to various things after the function body, but this data is included in
+                # ELF's (and maybe others) symbol size, so we have to actively look for the actual end of the function.
+
+                if self._insn_is_epilogue(cur_ins):
+                    state = STATE_NOT_IN_FUNC
+                    logging.debug('Identified function epilogue at {}'.format(hex(cur_ins.address)))
+                    cur_func.size -= (cur_func.address + cur_func.size) - (cur_ins.address + cur_ins.size)
+                    cur_func = None
+
+            elif state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'push' and \
+                    any(o.reg == ARM_REG_LR for o in cur_ins.operands if o.type == Operand.REG):
+
+                state = STATE_IN_FUNCTION
+                logging.debug(
+                    'Identified function by prologue at {} with prologue instruction {}'.format(hex(cur_ins.address),
+                                                                                                cur_ins))
+
+                cur_func = Function(cur_ins.address,
+                                    cur_ins.size,
+                                    'sub_' + hex(cur_ins.address)[2:],
+                                    self.executable)
+
+            elif state == STATE_IN_FUNCTION and self._insn_is_epilogue(cur_ins):
+                state = STATE_NOT_IN_FUNC
+                cur_func.size += cur_ins.size
+
+                logging.debug('Identified function epilogue at {}'.format(hex(cur_ins.address)))
+
+                self.executable.functions[cur_func.address] = cur_func
+
+                cur_func = None
+
+            elif state == STATE_IN_FUNCTION:
+                cur_func.size += cur_ins.size
 
     def cfg(self):
         pass
