@@ -164,6 +164,13 @@ class ARM_Analyzer(BaseAnalyzer):
 
         return instructions
 
+    def _identify_functions(self):
+        pass
+
+    def cfg(self):
+        pass
+
+
 class ARM_64_Analyzer(ARM_Analyzer):
     def __init__(self, executable):
         super(ARM_64_Analyzer, self).__init__(executable)

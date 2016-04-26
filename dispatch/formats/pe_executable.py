@@ -38,8 +38,6 @@ class PEExecutable(BaseExecutable):
             return ARCHITECTURE.X86_64
         elif machine == 'IMAGE_FILE_MACHINE_ARM':
             return ARCHITECTURE.ARM
-        elif machine in ('IMAGE_FILE_MACHINE_MIPS16', 'IMAGE_FILE_MACHINE_MIPSFPU', 'IMAGE_FILE_MACHINE_MIPSFPU16'):
-            return ARCHITECTURE.MIPS
         else:
             return None
 

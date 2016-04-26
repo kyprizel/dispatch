@@ -24,13 +24,6 @@ class BaseAnalyzer(object):
                                               self.executable.__class__.__name__,
                                               self.executable.fp)
 
-    def _create_disassembler(self):
-        '''
-        Creates a capstone disassembler instance for this architecture
-        :return: None
-        '''
-        raise NotImplementedError()
-
     def _gen_ins_map(self):
         '''
         Generates the instruction lookup dictionary

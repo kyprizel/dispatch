@@ -46,8 +46,6 @@ class ELFExecutable(BaseExecutable):
             return ARCHITECTURE.ARM
         elif machine == 'AArch64':
             return ARCHITECTURE.ARM_64
-        elif machine == 'MIPS':
-            return ARCHITECTURE.MIPS
         else:
             return None
 
