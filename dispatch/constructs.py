@@ -187,8 +187,9 @@ class Operand(object):
     REG = 2
     MEM = 3
 
-    def __init__(self, type, instruction, **kwargs):
+    def __init__(self, type, size, instruction, **kwargs):
         self.type = type
+        self.size = size
         self._instruction = instruction
         if self.type == Operand.IMM:
             self.imm = int(kwargs.get('imm'))
@@ -258,13 +259,13 @@ class Operand(object):
 
 def operand_from_cs_op(csOp, instruction):
     if csOp.type == capstone.CS_OP_IMM:
-        return Operand(Operand.IMM, instruction, imm=csOp.imm)
+        return Operand(Operand.IMM, instruction.size, instruction, imm=csOp.imm)
     elif csOp.type == capstone.CS_OP_FP:
-        return Operand(Operand.FP, instruction, fp=csOp.fp)
+        return Operand(Operand.FP, instruction.size, instruction, fp=csOp.fp)
     elif csOp.type == capstone.CS_OP_REG:
-        return Operand(Operand.REG, instruction, reg=csOp.reg)
+        return Operand(Operand.REG, instruction.size, instruction, reg=csOp.reg)
     elif csOp.type == capstone.CS_OP_MEM:
-        return Operand(Operand.MEM, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
+        return Operand(Operand.MEM, instruction.size, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
 
 
 def instruction_from_cs_insn(csInsn, executable):
