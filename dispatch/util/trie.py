@@ -31,16 +31,23 @@ class Trie(object):
             return node.value
 
         elif type(item) == slice:
-            uncommon_bits = (item.stop ^ item.start).bit_length()
+            start = item.start
+            stop = item.stop
+            if start is None:
+                start = 0
+            if stop is None:
+                # 128 bits max address. Seems big enough for practical purposes
+                stop = 0xFFFFFFFFFFFFFFFF
+            uncommon_bits = (stop ^ start).bit_length()
 
             node = self
-            for bucket in [(item.start >> i) & Trie.BUCKET_MASK for \
+            for bucket in [(start >> i) & Trie.BUCKET_MASK for \
                            i in range(64, uncommon_bits, -Trie.BUCKET_LEN)]:
                 if not node.children[bucket]:
                     raise KeyError()
                 node = node.children[bucket]
 
-            return [v for v in iter(node) if item.start <= v.address < item.stop][::item.step]
+            return [v for v in iter(node) if start <= v.address < stop][::item.step]
 
     def __iter__(self):
         if self.value:
