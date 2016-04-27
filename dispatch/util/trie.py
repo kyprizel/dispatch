@@ -31,7 +31,7 @@ class Trie(object):
             return node.value
 
         elif type(item) == slice:
-            uncommon_bits = (item.stop - item.start).bit_length() + 1
+            uncommon_bits = (item.stop ^ item.start).bit_length()
 
             node = self
             for bucket in [(item.start >> i) & Trie.BUCKET_MASK for \
