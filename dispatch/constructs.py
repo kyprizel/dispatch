@@ -222,8 +222,14 @@ class Operand(object):
             return set()
 
     def __str__(self):
+        sizes = {
+                1: 'byte',
+                2: 'word',
+                4: 'dword',
+                8: 'qword'
+                }
         if self.type == Operand.IMM:
-            return hex(self.imm)
+            return sizes[self.size] + ' ' + hex(self.imm)
         elif self.type == Operand.FP:
             return str(self.fp)
         elif self.type == Operand.REG:
@@ -254,18 +260,18 @@ class Operand(object):
 
             s += ']'
 
-            return s
+            return sizes[self.size] + ' ' + s
 
 
 def operand_from_cs_op(csOp, instruction):
     if csOp.type == capstone.CS_OP_IMM:
-        return Operand(Operand.IMM, instruction.size, instruction, imm=csOp.imm)
+        return Operand(Operand.IMM, csOp.size, instruction, imm=csOp.imm)
     elif csOp.type == capstone.CS_OP_FP:
-        return Operand(Operand.FP, instruction.size, instruction, fp=csOp.fp)
+        return Operand(Operand.FP, csOp.size, instruction, fp=csOp.fp)
     elif csOp.type == capstone.CS_OP_REG:
-        return Operand(Operand.REG, instruction.size, instruction, reg=csOp.reg)
+        return Operand(Operand.REG, csOp.size, instruction, reg=csOp.reg)
     elif csOp.type == capstone.CS_OP_MEM:
-        return Operand(Operand.MEM, instruction.size, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
+        return Operand(Operand.MEM, csOp.size, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
 
 
 def instruction_from_cs_insn(csInsn, executable):
