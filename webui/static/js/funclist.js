@@ -147,7 +147,8 @@ var divide_instructions = function() {
         var bb_addr = undefined; // address of the basic block's head
         Array.from(bb.children).forEach(function(insn_block) {
             var new_content = "";
-            var ss = parse_instruction(insn_block.innerHTML);
+            var raw_insn = insn_block.innerHTML.replace('&nbsp;', ''); // sometimes we get nbsps from graphvis for some reason -- kill them
+            var ss = parse_instruction(raw_insn);
             if (insn_block.tagName.toLowerCase() == 'title') {
                 bb_addr = insn_block.innerHTML;
             } else {
