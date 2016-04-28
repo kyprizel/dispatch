@@ -235,7 +235,44 @@ class ARM_Analyzer(BaseAnalyzer):
                 cur_func.size += cur_ins.size
 
     def cfg(self):
-        pass
+        edges = set()
+
+        for f in self.executable.iter_functions():
+            if f.type == Function.NORMAL_FUNC:
+                for ins in f.instructions:
+                    if ins.is_call() and ins.operands[-1].type == Operand.IMM:
+                        call_addr = ins.operands[-1].imm
+                        if self.executable.vaddr_is_executable(call_addr):
+                            edge = CFGEdge(ins.address, call_addr, CFGEdge.CALL)
+                            edges.add(edge)
+
+                for cur_bb in f.bbs:
+                    last_ins = cur_bb.instructions[-1]
+
+                    if last_ins.is_jump():
+                        if last_ins.operands[-1].type == Operand.IMM:
+                            jmp_addr = last_ins.operands[-1].imm
+
+                            if self.executable.vaddr_is_executable(jmp_addr):
+                                if last_ins.mnemonic == 'b' or last_ins.mnemonic == 'bx':
+                                    edge = CFGEdge(last_ins.address, jmp_addr, CFGEdge.DEFAULT)
+                                    edges.add(edge)
+                                else:  # Conditional jump
+                                    # True case
+                                    edge = CFGEdge(last_ins.address, jmp_addr, CFGEdge.COND_JUMP, True)
+                                    edges.add(edge)
+
+                                    # Default/fall-through case
+                                    next_addr = last_ins.address + last_ins.size
+                                    edge = CFGEdge(last_ins.address, next_addr, CFGEdge.COND_JUMP, False)
+                                    edges.add(edge)
+                    elif last_ins != f.instructions[-1]:
+                        # Otherwise, if we're just at the end of a BB that's not the end of the function, just fall
+                        # through to the next of the instruction
+                        edge = CFGEdge(last_ins.address, last_ins.address + last_ins.size, CFGEdge.DEFAULT)
+                        edges.add(edge)
+
+        return edges
 
 
 class ARM_64_Analyzer(ARM_Analyzer):

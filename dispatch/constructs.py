@@ -209,7 +209,7 @@ class Operand(object):
         # Auto-simplify ip-relative operands to their actual address
         if self.type == Operand.MEM and self.base in self._instruction._executable.analyzer.IP_REGS and self.index == 0:
             addr = self._instruction.address + self._instruction.size + self.index * self.scale + self.disp
-            return Operand(Operand.MEM, self._instruction, disp=addr)
+            return Operand(Operand.MEM, self.size, self._instruction, disp=addr)
 
         return self
 
@@ -223,6 +223,7 @@ class Operand(object):
 
     def __str__(self):
         sizes = {
+                None: '',
                 1: 'byte',
                 2: 'word',
                 4: 'dword',
@@ -264,22 +265,30 @@ class Operand(object):
 
 
 def operand_from_cs_op(csOp, instruction):
+    size = csOp.size if hasattr(csOp, 'size') else None
     if csOp.type == capstone.CS_OP_IMM:
-        return Operand(Operand.IMM, csOp.size, instruction, imm=csOp.imm)
+        return Operand(Operand.IMM, size, instruction, imm=csOp.imm)
     elif csOp.type == capstone.CS_OP_FP:
-        return Operand(Operand.FP, csOp.size, instruction, fp=csOp.fp)
+        return Operand(Operand.FP, size, instruction, fp=csOp.fp)
     elif csOp.type == capstone.CS_OP_REG:
-        return Operand(Operand.REG, csOp.size, instruction, reg=csOp.reg)
+        return Operand(Operand.REG, size, instruction, reg=csOp.reg)
     elif csOp.type == capstone.CS_OP_MEM:
-        return Operand(Operand.MEM, csOp.size, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
+        return Operand(Operand.MEM, size, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
 
 
 def instruction_from_cs_insn(csInsn, executable):
     groups = []
-    if capstone.CS_GRP_JUMP in csInsn.groups:
-        groups.append(Instruction.GRP_JUMP)
-    if capstone.CS_GRP_CALL in csInsn.groups:
-        groups.append(Instruction.GRP_CALL)
+
+    if executable.architecture in (ARCHITECTURE.ARM, ARCHITECTURE.ARM_64):
+        if csInsn.mnemonic.startswith('bl'):
+            groups.append(Instruction.GRP_CALL)
+        elif csInsn.mnemonic.startswith('b'):
+            groups.append(Instruction.GRP_JUMP)
+    else:
+        if capstone.CS_GRP_JUMP in csInsn.groups:
+            groups.append(Instruction.GRP_JUMP)
+        if capstone.CS_GRP_CALL in csInsn.groups:
+            groups.append(Instruction.GRP_CALL)
 
     instruction = Instruction(csInsn.address, csInsn.size, csInsn.bytes, csInsn.mnemonic, [], groups, csInsn, executable)
 
