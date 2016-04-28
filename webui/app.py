@@ -78,6 +78,8 @@ def graph(function_name):
                     color = "red"
             elif edge.type == CFGEdge.SWITCH:
                 color = "magenta"
+            elif edge.type == CFGEdge.CALL: # recursive calls can be blue
+                color = "blue"
             # hacky way of making loops to the same basic block go bottom-to-top.
             # Should be replaced if we can get ortho lines to support head/tail port options
             direction = 'forward'
