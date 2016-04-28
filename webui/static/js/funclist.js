@@ -38,7 +38,7 @@ var load_function_list = function () {
         for (var i = 0; i < functions.length; i++) {
             var node = document.createElement('span');
             node.innerText = functions[i];
-            node.className = 'function';
+            node.className = 'functionlist-entry';
             functions[i] = node;
         }
 
