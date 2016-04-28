@@ -37,6 +37,14 @@ tspan {
     fill: red;
 }
 
+.function {
+    fill: darkblue;
+}
+
+.literal {
+    fill: #D14B12;
+}
+
 .comment {
     fill: green;
 }

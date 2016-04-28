@@ -164,6 +164,12 @@ var divide_instructions = function() {
                     if (instruction_names.indexOf(x.toLowerCase()) != -1) {
                         classes.push('instruction');
                     }
+                    if (current_view.functions.indexOf(x) != -1) {
+                        classes.push('function');
+                    }
+                    if (x.startsWith('0x')) {
+                        classes.push('literal');
+                    }
                     if (x[0] == ';') {
                         classes.push('comment');
                     }
