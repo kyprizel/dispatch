@@ -126,7 +126,7 @@ class BaseAnalyzer(object):
         '''
         for ins in self.ins_map:
             for operand in ins.operands:
-                if operand.type == Operand.IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
+                if operand is not None and operand.type == Operand.IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
                     if operand.imm in self.executable.xrefs:
                         self.executable.xrefs[operand.imm].add(ins.address)
                     else:
