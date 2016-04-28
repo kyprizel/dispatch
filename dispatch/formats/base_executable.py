@@ -2,9 +2,8 @@ import os
 import logging
 from StringIO import StringIO
 
-from ..analysis.arm_analyzer import *
-from ..analysis.mips_analyzer import *
 from ..analysis.x86_analyzer import *
+from ..analysis.arm_analyzer import *
 
 from ..enums import *
 
@@ -28,6 +27,7 @@ class BaseExecutable(object):
         self.helper = None
 
         self.analyzer = None
+        self.libraries = []
         self.functions = {} # Vaddr: Function
         self.strings = {}
         self.xrefs = {}
@@ -47,7 +47,7 @@ class BaseExecutable(object):
         Determines if the executable is 64 bit or 32 bit.
         :return: True if the executable is 64 bit, otherwise false.
         '''
-        return self.architecture in (ARCHITECTURE.X86_64, ARCHITECTURE.ARM_64) # TODO: MIPS
+        return self.architecture in (ARCHITECTURE.X86_64, ARCHITECTURE.ARM_64)
 
     def address_length(self):
         '''
@@ -163,13 +163,11 @@ class BaseExecutable(object):
             self.analyzer = ARM_Analyzer(self)
         elif self.architecture == ARCHITECTURE.ARM_64:
             self.analyzer = ARM_64_Analyzer(self)
-        elif self.architecture == ARCHITECTURE.MIPS:
-            self.analyzer = MIPS_Analyzer(self)
 
         if self.analyzer:
             self.analyzer.analyze()
         else:
-            logging.warning('Could not create analyzer for {}'.format(self))
+            logging.error('Could not create analyzer for {}'.format(self))
 
         return self.analyzer
 

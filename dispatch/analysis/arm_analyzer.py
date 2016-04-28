@@ -22,6 +22,7 @@ class ARM_Analyzer(BaseAnalyzer):
         self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.arm_const.__dict__.iteritems() if k.startswith('ARM_REG')])
         self.IP_REGS = set([11])
         self.SP_REGS = set([12])
+        self.NOP_INSTRUCTION = '\x00\x00\x00\x00'
 
     def _gen_ins_map(self):
         # Again, since ARM binaries can have code using both instruction sets, we basically have to make a CFG and
@@ -36,7 +37,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
         entry = self.executable.entry_point()
 
-        if entry & 0x1:
+        if entry & 0b1:
             initial_mode = CS_MODE_THUMB
         else:
             initial_mode = CS_MODE_ARM
@@ -48,6 +49,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
         bb_disasm_mode[entry] = initial_mode
 
+        # TODO: make this much cleaner, not use raw mnemonic checks, etc
         while not to_analyze.empty():
             start_vaddr, mode = to_analyze.get()
 
@@ -72,10 +74,14 @@ class ARM_Analyzer(BaseAnalyzer):
                 elif ins.address in known_ends:  # At a constants table, so we know we're at the end of a bb/function
                     break
 
-                # TODO: epilogue detection
+                our_ins = instruction_from_cs_insn(ins, self.executable)
+                self.ins_map[ins.address] = our_ins
+
+                if self._insn_is_epilogue(our_ins):
+                    break
 
                 # Branch immediate
-                elif 'b' in ins.mnemonic and ins.operands[-1].type == CS_OP_IMM:
+                if ins.mnemonic.startswith('b') and ins.operands[-1].type == CS_OP_IMM:
                     jump_dst = ins.operands[-1].imm
 
                     if self.executable.vaddr_is_executable(jump_dst) and jump_dst not in bb_disasm_mode:
@@ -97,8 +103,8 @@ class ARM_Analyzer(BaseAnalyzer):
                     if ins.operands[-1].type == CS_OP_IMM and self.executable.vaddr_is_executable(ins.operands[-1].imm):
                         referenced_addr = ins.operands[-1].imm
                         if referenced_addr not in bb_disasm_mode:
-                            logging.debug('Found reference to address {} in instruction at {}'
-                                          .format(hex(int(jump_dst)), hex(int(ins.address))))
+                            logging.debug('Found reference to executable address {} in instruction at {}'
+                                          .format(hex(int(referenced_addr)), hex(int(ins.address))))
 
                             next_mode = CS_MODE_THUMB if referenced_addr & 0x1 else CS_MODE_ARM
                             referenced_addr &= ~0b1
@@ -126,7 +132,7 @@ class ARM_Analyzer(BaseAnalyzer):
 
                         if self.executable.vaddr_is_executable(referenced_addr):
                             logging.debug('Found reference to address {} through const table at {} in instruction at {}'
-                                              .format(hex(int(referenced_addr)), hex(int(ptr)), hex(int(ins.address))))
+                                          .format(hex(int(referenced_addr)), hex(int(ptr)), hex(int(ins.address))))
 
                             if referenced_addr not in bb_disasm_mode:
                                 next_mode = CS_MODE_THUMB if referenced_addr & 0x1 else CS_MODE_ARM
@@ -134,17 +140,140 @@ class ARM_Analyzer(BaseAnalyzer):
                                 bb_disasm_mode[referenced_addr] = next_mode
                                 to_analyze.put((referenced_addr, next_mode, ))
 
-        bb_vaddrs = sorted(bb_disasm_mode.keys())
+        self._disasm_mode = bb_disasm_mode
 
-        for bb_start, bb_end in zip(bb_vaddrs[:-1], bb_vaddrs[1:]):
-            code = self.executable.get_binary_vaddr_range(bb_start, bb_end)
+    def disassemble_range(self, start_vaddr, end_vaddr):
+        if start_vaddr & 0x1:
+            self._disassembler.mode = CS_MODE_THUMB
+        else:
+            self._disassembler.mode = CS_MODE_ARM
 
-            self._disassembler.mode = bb_disasm_mode[bb_start]
+        start_vaddr &= ~0b1
 
-            for ins in self._disassembler.disasm(code, bb_start):
-                if ins.id: # .byte "instructions" have an id of 0
-                    self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
-        
+        size = end_vaddr - start_vaddr
+        self.executable.binary.seek(self.executable.vaddr_binary_offset(start_vaddr))
+
+        instructions = []
+
+        for ins in self._disassembler.disasm(self.executable.binary.read(size), start_vaddr):
+            if ins.id:
+                instructions.append(instruction_from_cs_insn(ins, self.executable))
+
+        return instructions
+
+    def _insn_is_epilogue(self, ins):
+        """
+        Determines whether the instruction is a typical function epilogue
+        :param ins: Instruction to test
+        :return: True if the instruction is an epilogue
+        """
+
+        # b** {..., lr}
+        if ins.mnemonic.startswith('b') and ins.operands[0].type == Operand.REG and \
+            ins.operands[0].reg == ARM_REG_LR:
+            return True
+
+        # pop {..., pc}
+        elif ins.mnemonic == 'pop' and \
+            any(o.reg == ARM_REG_PC for o in ins.operands if o.type == Operand.REG):
+            return True
+
+        return False
+
+    def _identify_functions(self):
+        STATE_NOT_IN_FUNC, STATE_IN_FUNCTION = 0, 1
+
+        state = STATE_NOT_IN_FUNC
+
+        cur_func = None
+
+        for cur_ins in self.ins_map:
+            if cur_ins.address in self.executable.functions:
+                state = STATE_IN_FUNCTION
+                cur_func = self.executable.functions[cur_ins.address]
+
+                logging.debug('Analyzing function {} with pre-populated size {}'.format(cur_func, cur_func.size))
+
+                if not cur_func.size:
+                    # Function from symtab has no size, so start to keep track of it
+                    cur_func.size += cur_ins.size
+
+            elif cur_func and cur_func.contains_address(cur_ins.address):
+                # ARM sometimes stores pointers to various things after the function body, but this data is included in
+                # ELF's (and maybe others) symbol size, so we have to actively look for the actual end of the function.
+
+                if self._insn_is_epilogue(cur_ins):
+                    state = STATE_NOT_IN_FUNC
+                    logging.debug('Identified function epilogue at {}'.format(hex(cur_ins.address)))
+                    cur_func.size -= (cur_func.address + cur_func.size) - (cur_ins.address + cur_ins.size)
+                    cur_func = None
+
+            elif state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'push' and \
+                    any(o.reg == ARM_REG_LR for o in cur_ins.operands if o.type == Operand.REG):
+
+                state = STATE_IN_FUNCTION
+                logging.debug(
+                    'Identified function by prologue at {} with prologue instruction {}'.format(hex(cur_ins.address),
+                                                                                                cur_ins))
+
+                cur_func = Function(cur_ins.address,
+                                    cur_ins.size,
+                                    'sub_' + hex(cur_ins.address)[2:],
+                                    self.executable)
+
+            elif state == STATE_IN_FUNCTION and self._insn_is_epilogue(cur_ins):
+                state = STATE_NOT_IN_FUNC
+                cur_func.size += cur_ins.size
+
+                logging.debug('Identified function epilogue at {}'.format(hex(cur_ins.address)))
+
+                self.executable.functions[cur_func.address] = cur_func
+
+                cur_func = None
+
+            elif state == STATE_IN_FUNCTION:
+                cur_func.size += cur_ins.size
+
+    def cfg(self):
+        edges = set()
+
+        for f in self.executable.iter_functions():
+            if f.type == Function.NORMAL_FUNC:
+                for ins in f.instructions:
+                    if ins.is_call() and ins.operands[-1].type == Operand.IMM:
+                        call_addr = ins.operands[-1].imm
+                        if self.executable.vaddr_is_executable(call_addr):
+                            edge = CFGEdge(ins.address, call_addr, CFGEdge.CALL)
+                            edges.add(edge)
+
+                for cur_bb in f.bbs:
+                    last_ins = cur_bb.instructions[-1]
+
+                    if last_ins.is_jump():
+                        if last_ins.operands[-1].type == Operand.IMM:
+                            jmp_addr = last_ins.operands[-1].imm
+
+                            if self.executable.vaddr_is_executable(jmp_addr):
+                                if last_ins.mnemonic == 'b' or last_ins.mnemonic == 'bx':
+                                    edge = CFGEdge(last_ins.address, jmp_addr, CFGEdge.DEFAULT)
+                                    edges.add(edge)
+                                else:  # Conditional jump
+                                    # True case
+                                    edge = CFGEdge(last_ins.address, jmp_addr, CFGEdge.COND_JUMP, True)
+                                    edges.add(edge)
+
+                                    # Default/fall-through case
+                                    next_addr = last_ins.address + last_ins.size
+                                    edge = CFGEdge(last_ins.address, next_addr, CFGEdge.COND_JUMP, False)
+                                    edges.add(edge)
+                    elif last_ins != f.instructions[-1]:
+                        # Otherwise, if we're just at the end of a BB that's not the end of the function, just fall
+                        # through to the next of the instruction
+                        edge = CFGEdge(last_ins.address, last_ins.address + last_ins.size, CFGEdge.DEFAULT)
+                        edges.add(edge)
+
+        return edges
+
 
 class ARM_64_Analyzer(ARM_Analyzer):
     def __init__(self, executable):
@@ -161,3 +290,4 @@ class ARM_64_Analyzer(ARM_Analyzer):
         self.REGISTER_NAMES = dict([(v,k[10:].lower()) for k,v in capstone.arm64_const.__dict__.iteritems() if k.startswith('ARM64_REG')])
         self.IP_REGS = set()
         self.SP_REGS = set([4, 5])
+        self.NOP_INSTRUCTION = '\x1F\x20\x03\xD5'

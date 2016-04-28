@@ -1,6 +1,7 @@
 import capstone
 from capstone import *
 from capstone.x86_const import *
+import logging
 import struct
 
 from ..constructs import *
@@ -17,6 +18,7 @@ class X86_Analyzer(BaseAnalyzer):
         self.REG_NAMES = dict([(v,k[8:].lower()) for k,v in capstone.x86_const.__dict__.iteritems() if k.startswith('X86_REG')])
         self.IP_REGS = set([26, 34, 41])
         self.SP_REGS = set([30, 44, 47])
+        self.NOP_INSTRUCTION = '\x90'
 
     def _gen_ins_map(self):
         for section in self.executable.sections_to_disassemble():
@@ -24,24 +26,62 @@ class X86_Analyzer(BaseAnalyzer):
                 if ins.id: # .byte "instructions" have an id of 0
                     self.ins_map[ins.address] = instruction_from_cs_insn(ins, self.executable)
 
+    def disassemble_range(self, start_vaddr, end_vaddr):
+        size = end_vaddr - start_vaddr
+        self.executable.binary.seek(self.executable.vaddr_binary_offset(start_vaddr))
+
+        instructions = []
+
+        for ins in self._disassembler.disasm(self.executable.binary.read(size), start_vaddr):
+            if ins.id:
+                instructions.append(instruction_from_cs_insn(ins, self.executable))
+
+        return instructions
+
     def ins_modifies_esp(self, instruction):
         return 'pop' in instruction.mnemonic or 'push' in instruction.mnemonic \
                 or instruction.operands[0] in self.SP_REGS
 
     def _identify_functions(self):
-        STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0,1,2
+        """
+        This has to take into account 3 possibilities:
+
+        1) No symbols whatsoever. Here we basically end up just doing basic prologue/epilogue analysis and hoping that
+        the functions aren't weird and are relatively predictable.
+
+        2) Symbols with no size. We use the symbols we have as known starting points (replacing the prologue) but still
+        look for a epilogue (or the start of another function) to signal the end of the function.
+
+        3) Symbols with size.
+        """
+
+        STATE_NOT_IN_FUNC, STATE_IN_PROLOGUE, STATE_IN_FUNCTION = 0, 1, 2
 
         state = STATE_NOT_IN_FUNC
 
+        cur_func = None
+
         ops = []
 
-        for addr in self.ins_map:
-            cur_ins = self.ins_map[addr]
+        for cur_ins in self.ins_map:
+            if cur_ins.address in self.executable.functions:
+                state = STATE_IN_FUNCTION
+                cur_func = self.executable.functions[cur_ins.address]
+
+                logging.debug('Analyzing function {} with pre-populated size {}'.format(cur_func, cur_func.size))
+
+                if not cur_func.size:
+                    # Function from symtab has no size, so start to keep track of it
+                    cur_func.size += cur_ins.size
+
+            elif cur_func and cur_func.contains_address(cur_ins.address):
+                # Current function under analysis has a pre-populated size so just continue on until we get to the end
+                continue
 
             # Windows sometimes puts `mov edi, edi` as the first instruction in a function for hot patching, so we check
             # for this case to make sure the function we detect starts at the correct address.
             #  https://blogs.msdn.microsoft.com/oldnewthing/20110921-00/?p=9583
-            if state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'mov' and \
+            elif state == STATE_NOT_IN_FUNC and cur_ins.mnemonic == 'mov' and \
                     cur_ins.operands[0].type == Operand.REG and \
                     cur_ins.operands[0].reg == X86_REG_EDI and \
                     cur_ins.operands[1].type == Operand.REG and \
@@ -64,28 +104,29 @@ class X86_Analyzer(BaseAnalyzer):
                             cur_ins.operands[1].type == Operand.REG and \
                             cur_ins.operands[1].reg in self.SP_REGS:
 
+
                 state = STATE_IN_FUNCTION
                 ops.append(cur_ins)
 
-            elif state == STATE_IN_FUNCTION and cur_ins.mnemonic.startswith('ret'):
-                state = STATE_NOT_IN_FUNC
-                ops.append(cur_ins)
-
-                if ops[0].address not in self.executable.functions:
-                    f = Function(ops[0].address,
-                                 ops[-1].address + ops[-1].size - ops[0].address,
-                                 'sub_'+hex(ops[0].address)[2:],
-                                 self.executable)
-                    self.executable.functions[f.address] = f
-                elif self.executable.functions[ops[0].address].size == 0:
-                    # If size was left blank from a symtab entry, fill it in with what we discovered
-                    f = self.executable.functions[ops[0].address]
-                    f.size = ops[-1].address + ops[-1].size - ops[0].address
-
+                logging.debug('Identified function by prologue at {} with prologue ops {}'.format(hex(cur_ins.address), ops))
+                cur_func = Function(ops[0].address,
+                                    sum(i.size for i in ops),
+                                    'sub_'+hex(ops[0].address)[2:],
+                                    self.executable)
                 ops = []
 
+            elif state == STATE_IN_FUNCTION and 'ret' in cur_ins.mnemonic:
+                state = STATE_NOT_IN_FUNC
+                cur_func.size += cur_ins.size
+
+                logging.debug('Identified function epilogue at {}'.format(hex(cur_ins.address)))
+
+                self.executable.functions[cur_func.address] = cur_func
+
+                cur_func = None
+
             elif state == STATE_IN_FUNCTION:
-                ops.append(cur_ins)
+                cur_func.size += cur_ins.size
 
 
     def cfg(self):
@@ -98,7 +139,7 @@ class X86_Analyzer(BaseAnalyzer):
                     if ins.is_call() and ins.operands[-1].type == Operand.IMM:
                         call_addr = ins.operands[-1].imm
                         if self.executable.vaddr_is_executable(call_addr):
-                            edge = CFGEdge(ins.address, call_addr, CFGEdge.DEFAULT)
+                            edge = CFGEdge(ins.address, call_addr, CFGEdge.CALL)
                             edges.add(edge)
 
                 for cur_bb in f.bbs:
@@ -145,7 +186,7 @@ class X86_Analyzer(BaseAnalyzer):
                             instructions[3].operands[1].type == Operand.MEM and \
                         instructions[4].mnemonic == 'jmp' and \
                             instructions[4].operands[0].type == Operand.REG and \
-                            instructions[4].operands[0].reg ==  instructions[3].operands[0].reg:
+                            instructions[4].operands[0].reg == instructions[3].operands[0].reg:
 
                         num_cases = instructions[0].operands[1].imm
                         addr_size = instructions[3].operands[1].scale

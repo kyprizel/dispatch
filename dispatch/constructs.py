@@ -25,6 +25,43 @@ class Function(object):
     
     def __repr__(self):
         return '<Function \'{}\' at {}>'.format(self.name, hex(self.address))
+
+    def do_bb_analysis(self):
+        if self.instructions:
+            bb_ends = set([self.instructions[-1].address + self.instructions[-1].size])
+
+            for i in range(len(self.instructions) - 1):
+                cur = self.instructions[i]
+                next = self.instructions[i + 1]
+
+                if cur.is_jump() and cur.operands[0].type == Operand.IMM:
+                    bb_ends.add(cur.operands[0].imm)
+                    bb_ends.add(next.address)
+
+            bb_ends = sorted(list(bb_ends))
+            bb_instructions = []
+
+            for ins in self.instructions:
+                if ins.address == bb_ends[0] and bb_instructions:
+                    bb = BasicBlock(self,
+                                    bb_instructions[0].address,
+                                    bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
+                    bb.instructions = bb_instructions
+                    self.bbs.append(bb)
+
+                    bb_ends = bb_ends[1:]
+                    bb_instructions = [ins]
+                else:
+                    bb_instructions.append(ins)
+
+            # There will always be one BB left over which "ends" at the first address of the next function, so be
+            # sure to add it
+
+            bb = BasicBlock(self,
+                            bb_instructions[0].address,
+                            bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
+            bb.instructions = bb_instructions
+            self.bbs.append(bb)
     
     def contains_address(self, address):
         return self.address <= address < self.address + self.size
@@ -150,8 +187,9 @@ class Operand(object):
     REG = 2
     MEM = 3
 
-    def __init__(self, type, instruction, **kwargs):
+    def __init__(self, type, size, instruction, **kwargs):
         self.type = type
+        self.size = size
         self._instruction = instruction
         if self.type == Operand.IMM:
             self.imm = int(kwargs.get('imm'))
@@ -171,7 +209,7 @@ class Operand(object):
         # Auto-simplify ip-relative operands to their actual address
         if self.type == Operand.MEM and self.base in self._instruction._executable.analyzer.IP_REGS and self.index == 0:
             addr = self._instruction.address + self._instruction.size + self.index * self.scale + self.disp
-            return Operand(Operand.MEM, self._instruction, disp=addr)
+            return Operand(Operand.MEM, self.size, self._instruction, disp=addr)
 
         return self
 
@@ -184,8 +222,15 @@ class Operand(object):
             return set()
 
     def __str__(self):
+        sizes = {
+                None: '',
+                1: 'byte',
+                2: 'word',
+                4: 'dword',
+                8: 'qword'
+                }
         if self.type == Operand.IMM:
-            return hex(self.imm)
+            return sizes[self.size] + ' ' + hex(self.imm)
         elif self.type == Operand.FP:
             return str(self.fp)
         elif self.type == Operand.REG:
@@ -216,26 +261,34 @@ class Operand(object):
 
             s += ']'
 
-            return s
+            return sizes[self.size] + ' ' + s
 
 
 def operand_from_cs_op(csOp, instruction):
+    size = csOp.size if hasattr(csOp, 'size') else None
     if csOp.type == capstone.CS_OP_IMM:
-        return Operand(Operand.IMM, instruction, imm=csOp.imm)
+        return Operand(Operand.IMM, size, instruction, imm=csOp.imm)
     elif csOp.type == capstone.CS_OP_FP:
-        return Operand(Operand.FP, instruction, fp=csOp.fp)
+        return Operand(Operand.FP, size, instruction, fp=csOp.fp)
     elif csOp.type == capstone.CS_OP_REG:
-        return Operand(Operand.REG, instruction, reg=csOp.reg)
+        return Operand(Operand.REG, size, instruction, reg=csOp.reg)
     elif csOp.type == capstone.CS_OP_MEM:
-        return Operand(Operand.MEM, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
+        return Operand(Operand.MEM, size, instruction, base=csOp.mem.base, index=csOp.mem.index, scale=csOp.mem.scale, disp=csOp.mem.disp)
 
 
 def instruction_from_cs_insn(csInsn, executable):
     groups = []
-    if capstone.CS_GRP_JUMP in csInsn.groups:
-        groups.append(Instruction.GRP_JUMP)
-    if capstone.CS_GRP_CALL in csInsn.groups:
-        groups.append(Instruction.GRP_CALL)
+
+    if executable.architecture in (ARCHITECTURE.ARM, ARCHITECTURE.ARM_64):
+        if csInsn.mnemonic.startswith('bl'):
+            groups.append(Instruction.GRP_CALL)
+        elif csInsn.mnemonic.startswith('b'):
+            groups.append(Instruction.GRP_JUMP)
+    else:
+        if capstone.CS_GRP_JUMP in csInsn.groups:
+            groups.append(Instruction.GRP_JUMP)
+        if capstone.CS_GRP_CALL in csInsn.groups:
+            groups.append(Instruction.GRP_CALL)
 
     instruction = Instruction(csInsn.address, csInsn.size, csInsn.bytes, csInsn.mnemonic, [], groups, csInsn, executable)
 
@@ -280,6 +333,9 @@ class CFGEdge(object):
 
     # Edge from a switch/jump table. One edge should be added for each entry, and the corresponding key set as the value
     SWITCH = 2
+
+    # Edge from a call instruction.
+    CALL = 3
 
     def __init__(self, src, dst, type, value=None):
         self.src = src

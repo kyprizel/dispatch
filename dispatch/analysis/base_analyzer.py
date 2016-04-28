@@ -1,7 +1,7 @@
 import logging
 import re
 import string
-from collections import OrderedDict
+from ..util.trie import Trie
 
 from ..constructs import *
 
@@ -15,10 +15,8 @@ class BaseAnalyzer(object):
     '''
     def __init__(self, executable):
         self.executable = executable
-        
-        # Dictionary of vaddr: instruction for quick lookups.
-        # We use an OrderedDict so we can just `for addr in ins_map` and not have to worry about sorting
-        self.ins_map = OrderedDict()
+
+        self.ins_map = Trie()
     
     def __repr__(self):
         return '<{} for {} {} \'{}\'>'.format(self.__class__.__name__,
@@ -26,17 +24,19 @@ class BaseAnalyzer(object):
                                               self.executable.__class__.__name__,
                                               self.executable.fp)
 
-    def _create_disassembler(self):
-        '''
-        Creates a capstone disassembler instance for this architecture
-        :return: None
-        '''
-        raise NotImplementedError()
-
     def _gen_ins_map(self):
         '''
         Generates the instruction lookup dictionary
         :return: None
+        '''
+        raise NotImplementedError()
+
+    def disassemble_range(self, start_vaddr, end_vaddr):
+        '''
+        Return an array of instructions disassembled between start and end
+        :param start_vaddr: The virtual address to start disassembly at
+        :param end_vaddr: The last virtual address to disassemble
+        :return: Array of disassembled instructions
         '''
         raise NotImplementedError()
 
@@ -52,17 +52,13 @@ class BaseAnalyzer(object):
         Iterates through all found functions and add instructions inside that function to the Function object
         :return: None
         '''
-        insn_addrs = sorted(self.ins_map.keys())
-
         for f in self.executable.iter_functions():
-            try:
-                i = insn_addrs.index(f.address)
-
-                while i < len(insn_addrs) and insn_addrs[i] < f.address + f.size:
-                    f.instructions.append(self.ins_map[insn_addrs[i]])
-                    i += 1
-            except ValueError:
-                logging.debug('Function {} starts at code outside any executable section.'.format(f))
+            # some formats (such as macho) have special functions
+            # that don't actually exist in the binary, so we ignore them
+            if f.address in self.ins_map:
+                f.instructions = self.ins_map[f.address : f.address+f.size]
+            else:
+                f.instructions = []
 
     def _identify_strings(self):
         '''
@@ -81,6 +77,10 @@ class BaseAnalyzer(object):
                 self.executable.strings[vaddr] = String(found_string.group(), vaddr, self.executable)
 
     def _identify_bbs(self):
+        '''
+        Extracts all basic blocks from the executable and stores them in the associated function's bbs list
+        :return: None
+        '''
         for func in self.executable.iter_functions():
             if func.instructions:
                 bb_ends = set([func.instructions[-1].address + func.instructions[-1].size])
@@ -120,13 +120,17 @@ class BaseAnalyzer(object):
 
 
     def _mark_xrefs(self):
-        for addr, ins in self.ins_map.iteritems():
+        '''
+        Identify all the xrefs from the executable and store them in the xrefs dict (addr -> set of referencing addrs)
+        :return: None
+        '''
+        for ins in self.ins_map:
             for operand in ins.operands:
                 if operand.type == Operand.IMM and self.executable.vaddr_binary_offset(operand.imm) is not None:
                     if operand.imm in self.executable.xrefs:
-                        self.executable.xrefs[operand.imm].add(addr)
+                        self.executable.xrefs[operand.imm].add(ins.address)
                     else:
-                        self.executable.xrefs[operand.imm] = set([addr])
+                        self.executable.xrefs[operand.imm] = set([ins.address])
 
     def analyze(self):
         '''
@@ -142,10 +146,14 @@ class BaseAnalyzer(object):
 
         logging.info('Identifying functions')
         self._identify_functions()
+
+        # TODO: CFA
+
         logging.info('Populating function instructions')
         self._populate_func_instructions()
         logging.info('Identifying basic blocks')
-        self._identify_bbs()
+        for func in self.executable.iter_functions():
+            func.do_bb_analysis()
         logging.info('Marking XRefs')
         self._mark_xrefs()
 
@@ -155,6 +163,6 @@ class BaseAnalyzer(object):
     def cfg(self):
         '''
         Creates a control flow graph for the binary
-        :return: List of tuples that describe the edges of the graph.
+        :return: List of CFGEdges that describe the edges of the graph.
         '''
         raise NotImplementedError()

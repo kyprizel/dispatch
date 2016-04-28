@@ -8,4 +8,3 @@ class ARCHITECTURE:
     X86_64 = 'x86-64'
     ARM = 'ARM'
     ARM_64 = 'ARM64'
-    MIPS = 'MIPS'
