@@ -50,7 +50,7 @@ def graph(function_name):
     #cfg = executable.analyzer.cfg()
     global cfg
     
-    G = pgv.AGraph(directed=True, splines="ortho", bgcolor='#E0FFFF')
+    G = pgv.AGraph(directed=True, splines="ortho", bgcolor='#002b36')
     func = executable.function_named(function_name)
     for bb in func.iter_bbs():
         addr = bb.address
@@ -70,7 +70,7 @@ def graph(function_name):
                 continue
             CFGEdge = edge.__class__ # we can't import CFGEdge, so extract it here
             if edge.type == CFGEdge.DEFAULT:
-                color = "black"
+                color = "#268bd2"
             elif edge.type == CFGEdge.COND_JUMP:
                 if edge.value:
                     color = "green"
@@ -79,7 +79,7 @@ def graph(function_name):
             elif edge.type == CFGEdge.SWITCH:
                 color = "magenta"
             elif edge.type == CFGEdge.CALL: # recursive calls can be blue
-                color = "blue"
+                color = "#268bd2"
             # hacky way of making loops to the same basic block go bottom-to-top.
             # Should be replaced if we can get ortho lines to support head/tail port options
             direction = 'forward'

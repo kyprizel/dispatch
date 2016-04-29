@@ -1,19 +1,28 @@
 #graphcontainer {
     padding-left: 10px;
     height: 100%;
+     border-bottom: 1px solid white;
+    border-top: 1px solid white;
 }
 
 #bbs {
+  
+    border-radius: 5px;
     display: block;
-    background-color: #E0FFFF;
+    background-color: #002b36;
     width: 10wmin;
     height: 100%;
     overflow: auto; /* display scrollbar when overflow happens */
     overflow-x: scroll;
+
+
 }
 
 .node polygon {
-    fill: pink;
+    border-bottom: 1px solid white;
+    border-top: 1px solid white;
+    fill: #002b36;
+    stroke: white;
 }
 
 .edge path {
@@ -23,10 +32,11 @@
 tspan {
     font-family: 'Roboto Mono';
     font-size: 7pt;
+    fill: white;
 }
 
 .register {
-    fill: blue;
+    fill: #0077FF;
 }
 
 .delimiter {
@@ -38,7 +48,7 @@ tspan {
 }
 
 .function {
-    fill: darkblue;
+    fill: lightblue;
 }
 
 .literal {
@@ -50,8 +60,10 @@ tspan {
 }
 
 #disas {
+
     background-color: #FFFFE0;
     height: 100%;
     overflow: auto; /* display scrollbar when overflow happens */
     display: none;
 }
+
