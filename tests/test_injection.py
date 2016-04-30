@@ -19,7 +19,7 @@ instrumentation = '\xcc\xc3' # INT3, RET
 instrumentation_vaddr = executable.inject(instrumentation)
 logging.debug('Injected instrumentation asm at {}'.format(hex(instrumentation_vaddr)))
 
-for function in [executable.function_named("main")]: #executable.iter_functions():
+for function in executable.iter_functions():
     replaced_instruction = None
     for instruction in function.instructions:
         if instruction.size >= 5 \
@@ -55,7 +55,7 @@ for function in [executable.function_named("main")]: #executable.iter_functions(
         # Finally, replace the instruction we lifed with a call to the ins and jump we just put together
         call_ins = '\xe8' + struct.pack(executable.pack_endianness + 'i', ins_jump_vaddr - (replaced_instruction.address + 5))
 
-        executable.replace_instruction(replaced_instruction, call_ins)
+        executable.replace_instruction(replaced_instruction.address, call_ins)
 
         logging.debug('Replaced instruction at {} with call to {}'.format(hex(replaced_instruction.address), hex(ins_jump_vaddr)))
 

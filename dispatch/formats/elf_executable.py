@@ -240,6 +240,7 @@ class ELFExecutable(BaseExecutable):
         return True
 
     def inject(self, asm, update_entry=False):
+        print "<"*100
         for segment in self.helper.iter_segments():
             if segment['p_type'] == 'PT_LOAD' and segment['p_flags'] & P_FLAGS.PF_X:
                 injection_section_idx = max(i for i in range(self.helper.num_sections()) if segment.section_in_segment(self.helper.get_section(i)))
@@ -291,7 +292,7 @@ class ELFExecutable(BaseExecutable):
         self.binary.write(new_asm)
         self.binary.write(self.analyzer.NOP_INSTRUCTION * ((vaddr - len(new_asm)) / len(self.analyzer.NOP_INSTRUCTION)))
 
-        new_instructions = self.analyzer.disassemble_range(vaddr, vaddr+new_asm)
+        new_instructions = self.analyzer.disassemble_range(vaddr, vaddr+len(new_asm))
 
         func = self.function_containing_vaddr(vaddr)
 
