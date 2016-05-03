@@ -44,7 +44,7 @@ var load_function_list = function () {
 
         var heading = document.createElement('div');
         heading.className = 'heading';
-        heading.innerHTML = '(✿◕‿◕) functions (◕‿◕✿)';
+        heading.innerHTML = '~~~functions~~~';
         function_list.appendChild(heading);
 
         // Sort the list of functions when we load the page
@@ -57,7 +57,8 @@ var load_function_list = function () {
         for (var i = 0; i < functions.length; i++) {
             var func = functions[i];
             func.addEventListener('click', function(e) {
-                var func_el = e.srcElement;
+                var func_el = e.target;
+                console.log(e);
                 load_function(func_el.innerText);
             });
         }
@@ -190,7 +191,7 @@ var divide_instructions = function() {
 }
 
 var instruction_clicked = function(e) {
-    var ins = e.srcElement;
+    var ins = e.target;
     if (ins == current_view.selected_element) { // double-clicking element
         if (current_view.functions.indexOf(ins.innerHTML) != -1) { // if it's a function, jump to it
             load_function(ins.innerHTML);
@@ -250,7 +251,7 @@ var load_xrefs_menu = function(function_name) {
         list.id = 'xrefs';
         var heading = document.createElement('div');
         heading.className = 'heading';
-        heading.innerHTML = '(✿◕‿◕) x-refs (◕‿◕✿)';
+        heading.innerHTML = '~~~~~x-refs~~~~~';
         list.appendChild(heading);
 
         xrefs.forEach(function(xref) {
@@ -259,7 +260,7 @@ var load_xrefs_menu = function(function_name) {
             li.className = 'xref';
             list.appendChild(li);
             li.addEventListener('click', function(e) {
-                var func_el = e.srcElement;
+                var func_el = e.target;
                 load_function(func_el.innerText);
             });
         });
@@ -301,3 +302,4 @@ var scroll_handle = function(e) {
 }
 
 document.addEventListener('DOMContentLoaded', setup);
+
