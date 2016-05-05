@@ -15,7 +15,10 @@ executable = dispatch.read_executable(sys.argv[1])
 # Invoke the analyzer to find functions
 executable.analyze()
 
-instrumentation = '\xcc\xc3' # INT3, RET
+# Prepare the executable for code injection
+executable.prepare_for_injection()
+
+instrumentation = '\xcc\xc3' # Sample x86 instrumentation - INT 3 (SIGTRAP), RET
 instrumentation_vaddr = executable.inject(instrumentation)
 logging.debug('Injected instrumentation asm at {}'.format(hex(instrumentation_vaddr)))
 
@@ -26,10 +29,9 @@ for function in executable.iter_functions():
                 and not instruction.redirects_flow() \
                 and not instruction.references_sp() \
                 and not instruction.references_ip():
-            logging.debug('In {} - Found candidate replacement instruction at {}: {} {}'.format(function,
-                                                                                               hex(instruction.address),
-                                                                                               instruction.mnemonic,
-                                                                                               instruction.op_str()))
+            logging.debug('In {} - Found candidate replacement instruction at {}: {} {}'
+                          .format(function, hex(instruction.address), instruction.mnemonic, instruction.op_str()))
+
             replaced_instruction = instruction
             break
 

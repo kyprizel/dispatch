@@ -140,7 +140,7 @@ class MachOExecutable(BaseExecutable):
             if s.name in STRING_SECTIONS:
                 yield s
 
-    def _prepare_for_injection(self):
+    def prepare_for_injection(self):
         # Total size of the stuff we're going to be adding in the middle of the binary
         offset = 72+80 if self.is_64_bit() else 56+68  # 1 segment header + 1 section header
 
@@ -189,16 +189,16 @@ class MachOExecutable(BaseExecutable):
         if found:
             injection_vaddr = found[0].vmaddr
         else:
-            inject_seg = self._prepare_for_injection()
+            logging.warning(
+                'prepare_for_injection() was not called before inject(). This may cause unexpected behavior')
+            inject_seg = self.prepare_for_injection()
             injection_vaddr = inject_seg.vmaddr
-
 
         if update_entry:
             for lc, cmd, _ in self.helper.headers[0].commands:
                 if lc.cmd == LC_MAIN:
                     cmd.entryoff = injection_vaddr
                     break
-
 
         self.binary.seek(0)
 
