@@ -11,8 +11,8 @@ class Function(object):
     DYNAMIC_FUNC = 1
 
     def __init__(self, address, size, name, executable, type=NORMAL_FUNC):
-        self.address = address
-        self.size = size
+        self.address = int(address)
+        self.size = int(size)
         self.name = name
         self.type = type
         self._executable = executable
@@ -34,9 +34,10 @@ class Function(object):
                 cur = self.instructions[i]
                 next = self.instructions[i + 1]
 
-                if cur.is_jump() and cur.operands[0].type == Operand.IMM:
-                    bb_ends.add(cur.operands[0].imm)
+                if cur.is_jump():
                     bb_ends.add(next.address)
+                    if cur.operands[0].type == Operand.IMM:
+                        bb_ends.add(cur.operands[0].imm)
 
             bb_ends = sorted(list(bb_ends))
             bb_instructions = []
@@ -89,8 +90,8 @@ class Function(object):
 class BasicBlock(object):
     def __init__(self, parent_func, address, size):
         self.parent = parent_func
-        self.address = address
-        self.size = size
+        self.address = int(address)
+        self.size = int(size)
         self.offset = self.parent.address - self.address
         self.instructions = []
 
