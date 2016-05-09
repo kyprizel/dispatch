@@ -2,6 +2,7 @@ import capstone
 from capstone import *
 from capstone.x86_const import *
 import logging
+import collections
 import struct
 
 from ..constructs import *
@@ -168,39 +169,141 @@ class X86_Analyzer(BaseAnalyzer):
                         edge = CFGEdge(last_ins.address, last_ins.address + last_ins.size, CFGEdge.DEFAULT)
                         edges.add(edge)
 
+            edges.update(self._do_jump_table_detection(f))
 
-                # Jump table detection.
-                # Looking for:
-                #  cmp {something}, {num_cases}
-                #  cond_jmp {default_case}
-                #  mov {reg}, {some_var}
-                #  mov {reg2}, [disp+{reg}*addr_size]
-                #  jmp {reg2}
+        return edges
 
-                ins_sets = [f.instructions[i:i + 5] for i in range(len(f.instructions) - 4)]
-                for instructions in ins_sets:
-                    if instructions[0].mnemonic == 'cmp' and \
-                        instructions[1].is_jump() and instructions[1].mnemonic != 'jmp' and \
-                        instructions[3].mnemonic == 'mov' and\
-                            instructions[3].operands[0].type == Operand.REG and \
-                            instructions[3].operands[1].type == Operand.MEM and \
-                        instructions[4].mnemonic == 'jmp' and \
-                            instructions[4].operands[0].type == Operand.REG and \
-                            instructions[4].operands[0].reg == instructions[3].operands[0].reg:
+    def _do_jump_table_detection(self, f):
+        # Basic idea is to label each BB as one of these types based on its contents
+        class BB_TYPE:
+            NONE  = 0  # Seemingly not associated with a switch
+            VALUE = 1  # A simple value compare (cmp and jmp)
+            RANGE = 2  # A range compare (cmp and jl/jle/jg/jge)
+            TABLE = 3  # A jump to a jump table (anything with [_+_*(4,8)]
 
-                        num_cases = instructions[0].operands[1].imm
-                        addr_size = instructions[3].operands[1].scale
-                        jmp_table_offset = instructions[3].operands[1].disp
 
-                        self.executable.binary.seek(self.executable.vaddr_binary_offset(jmp_table_offset))
-                        table = self.executable.binary.read(num_cases*addr_size)
+        # BB address -> (type, important instruction)
+        bb_types = {}
 
-                        entries = struct.unpack(self.executable.pack_endianness + (self.executable.address_pack_type*num_cases), table)
+        for bb in f.iter_bbs():
+            bb_type = (BB_TYPE.NONE, None)
 
-                        for idx, addr in enumerate(entries):
-                            edge = CFGEdge(instructions[4].address, addr, CFGEdge.SWITCH, idx)
-                            edges.add(edge)
+            # Table detection
+            # NOTE: We *should* do full register tracing if this instruction is a mov/lea,
+            #  but we can relatively safely assume that the jump at the end of the BB
+            #  will be a `jmp {reg}` if this is indeed a jump table
+            # NOTE: Value tables will be marked as a TABLE, but sanity checking later on
+            #  prevents values from being interpreted as jump destinations
+            for i, ins in enumerate(bb.instructions):
+                if any(o.type == Operand.MEM and o.scale in [4,8] for o in ins.operands):
+                    bb_type = (BB_TYPE.TABLE, ins)
+                    break
 
+            # Range detection
+            cmp_ins = None
+            for i, ins in enumerate(bb.instructions):
+                if ins.mnemonic == 'cmp': # Anything else? Is sub used in ranges in clang?
+                    cmp_ins = ins
+
+                elif cmp_ins and ins.is_jump() and ins.mnemonic in ('jb','jnae','jnb','jae','jbe',
+                                                                    'jna','ja','jnbe','jl','jnge',
+                                                                    'jge','jnl','jle','jng','jg','jnle'):
+                    bb_type = (BB_TYPE.RANGE, cmp_ins)
+
+            # Value detection
+            cmp_ins = None
+            for i, ins in enumerate(bb.instructions):
+                if ins.mnemonic in ('cmp', 'test', 'sub'): # TODO: Properly check for clang's use of `sub`
+                    cmp_ins = ins
+
+                elif cmp_ins and ins.mnemonic in ('je', 'jne'):
+                    bb_type = (BB_TYPE.VALUE, cmp_ins)
+
+            logging.debug("Marking BB at {} as type {}".format(hex(bb.address), bb_type))
+            bb_types[bb.address] = bb_type
+
+
+        # Start address of table -> (type, scale, {relative location})
+        table_types = {}
+
+        class TABLE_TYPE:
+            ADDR_REL = 0  # Values in the table are relative to a constant loaded elsewhere
+            ABS = 1       # Values in the table are absolute
+
+        ins_to_table = []
+
+        # TODO: Look for _CSWTCH symbols
+
+        for bb in f.iter_bbs():
+            if bb_types[bb.address][0] == BB_TYPE.TABLE:
+                for ins in bb.instructions:
+                    # Special-case the various ways of doing a jump table
+
+                    # Option 1 (seemingly most common): lea {reg}, {ip-rel const}
+                    # NOTE: This could either be a jump table or a value table
+                    if ins.mnemonic == 'lea' and ins.operands[1].type == Operand.MEM:
+                        insn_with_mem_op = bb_types[bb.address][1]
+                        table_scale = insn_with_mem_op.operands[1].scale
+
+                        table_addr = ins.address + ins.size + ins.operands[1].disp
+
+                        logging.debug("Marking table at {} as an ADDR_REL table".format(hex(table_addr)))
+                        table_types[table_addr] = (TABLE_TYPE.ADDR_REL, table_scale, ins.address + ins.size)
+                        ins_to_table.append((ins.address, table_addr))
+                        break
+
+                    # Option 2: offset is directly in the mem. operand
+                    mem_offset = bb_types[bb.address][1].operands[-1].disp
+                    if mem_offset:
+                        logging.debug("Marking table at {} as an ABS table".format(hex(mem_offset)))
+                        table_types[mem_offset] = (TABLE_TYPE.ABS, bb_types[bb.address][1].operands[-1].scale)
+                        ins_to_table.append((ins.address, mem_offset))
+                        break
+
+                    logging.debug("Couldn't find anything with a table offset in BB at {}".format(hex(bb.address)))
+
+
+        # Add the end of the segment as an upper bound
+
+        table_types[self.executable.executable_segment_vaddr() + self.executable.executable_segment_size()] = None
+
+        # http://stackoverflow.com/questions/32030412/twos-complement-sign-extension-python
+        def sign_extend(value, bits):
+            sign_bit = 1 << (bits - 1)
+            return (value & (sign_bit - 1)) - (value & sign_bit)
+
+        # Start address of table -> [destination addresses]
+        table_values = collections.defaultdict(list)
+
+        table_addrs = sorted(table_types.keys())
+
+        for start_a, end_a in zip(table_addrs[:-1], table_addrs[1:]):
+            t_type = table_types[start_a][0]
+            scale = table_types[start_a][1]
+            for addr in range(start_a, end_a, scale):
+                raw = self.executable.get_binary_vaddr_range(addr, addr+scale)
+                data_val = struct.unpack(self.executable.pack_endianness+('i' if scale == 4 else 'q'), raw)[0]
+                if t_type == TABLE_TYPE.ADDR_REL:
+                    addr_bit_len = 8*self.executable.address_length()
+                    abs_val = (start_a+sign_extend(data_val, addr_bit_len)) & (2**(addr_bit_len+1) - 1)
+                else:
+                    abs_val = data_val
+
+                # Only add the values if they land us in the executable segment
+                # TODO: Be smarter here. Add restrictions to make sure that the table doesn't extend
+                #  past the end of a section/segment before making sure the address is valid
+                valid_start = self.executable.executable_segment_vaddr()
+                valid_end = valid_start + self.executable.executable_segment_size()
+
+                if valid_start <= abs_val < valid_end:
+                    table_values[start_a].append(abs_val)
+                else:
+                    break
+
+        edges = set()
+        for addr, table in ins_to_table:
+            for dst in table_values[table]:
+                edges.add(CFGEdge(addr, dst, CFGEdge.SWITCH))
 
         return edges
 
