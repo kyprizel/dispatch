@@ -57,7 +57,7 @@ class MachOExecutable(BaseExecutable):
         return self.executable_segment.vmaddr
 
     def executable_segment_size(self):
-        return self.executable_segment.vmszie
+        return self.executable_segment.vmsize
 
     def entry_point(self):
         for lc, cmd, _ in self.helper.headers[0].commands:
