@@ -37,8 +37,8 @@ var load_function_list = function () {
         current_view.functions = Array.from(functions);
         for (var i = 0; i < functions.length; i++) {
             var node = document.createElement('span');
-            node.innerText = functions[i];
             node.className = 'functionlist-entry';
+            node.innerHTML = functions[i];
             functions[i] = node;
         }
 
@@ -49,7 +49,7 @@ var load_function_list = function () {
 
         // Sort the list of functions when we load the page
 
-        functions.sort(function(a, b) {return (a.innerText < b.innerText) ? 1 : -1;});
+        functions.sort(function(a, b) {return (a.innerHTML < b.innerHTML) ? 1 : -1;});
         for (var i = 0; i < functions.length; i++) {
             function_list.appendChild(functions[i]);
         }
@@ -59,7 +59,7 @@ var load_function_list = function () {
             func.addEventListener('click', function(e) {
                 var func_el = e.target;
                 console.log(e);
-                load_function(func_el.innerText);
+                load_function(func_el.innerHTML);
             });
         }
     });
@@ -71,7 +71,7 @@ var load_function = function(name) {
         var disas = document.getElementById('disas');
         current_view.function_name = func.name;
         $.get('/dis/'+func.name, function(data) {
-            disas.innerText = data;
+            disas.innerHTML = data;
             layout_bbs(func);
         });
         load_xrefs_menu(name);
@@ -261,7 +261,7 @@ var load_xrefs_menu = function(function_name) {
             list.appendChild(li);
             li.addEventListener('click', function(e) {
                 var func_el = e.target;
-                load_function(func_el.innerText);
+                load_function(func_el.innerHTML);
             });
         });
 
