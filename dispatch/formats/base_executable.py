@@ -171,6 +171,15 @@ class BaseExecutable(object):
 
         return self.analyzer
 
+    def prepare_for_injection(self):
+        '''
+        Prepares the binary for code injection, creating sections/segments where needed.
+        This should *always* be called before inject() is called, as it provides the initial values for
+        next_injection_vaddr which may be required to do certain IP-relative computations.
+        :return: None
+        '''
+        raise NotImplementedError()
+
     def inject(self, asm, update_entry=False):
         '''
         Injects the given assembly into the binary, optionally updating the entry point if the injected code is to run

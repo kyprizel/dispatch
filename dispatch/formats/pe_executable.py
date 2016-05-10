@@ -79,7 +79,7 @@ class PEExecutable(BaseExecutable):
                 else:
                     self.functions[symbol.address].name = symbol.name
 
-    def _prepare_for_injection(self):
+    def prepare_for_injection(self):
         sdp = SectionDoubleP(self.helper)
         to_inject = '\x00' * SECTION_SIZE
         self.helper = sdp.push_back(Name='.inject', Characteristics=0x60000020, Data=to_inject)
@@ -89,7 +89,9 @@ class PEExecutable(BaseExecutable):
         has_injection_section = [s for s in self.helper.sections if s.Name.startswith('.inject')]
 
         if not has_injection_section:
-            self._prepare_for_injection()
+            logging.warning(
+                'prepare_for_injection() was not called before inject(). This may cause unexpected behavior')
+            self.prepare_for_injection()
 
         inject_rva = self.next_injection_vaddr - self.helper.OPTIONAL_HEADER.ImageBase
         self.helper.set_bytes_at_rva(inject_rva, asm)

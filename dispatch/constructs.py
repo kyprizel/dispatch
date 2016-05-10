@@ -11,8 +11,8 @@ class Function(object):
     DYNAMIC_FUNC = 1
 
     def __init__(self, address, size, name, executable, type=NORMAL_FUNC):
-        self.address = address
-        self.size = size
+        self.address = int(address)
+        self.size = int(size)
         self.name = name
         self.type = type
         self._executable = executable
@@ -22,7 +22,7 @@ class Function(object):
         # Instead, executable.replace_instruction should be used.
         self.instructions = [] # Sequential list of instructions
         self.bbs = [] # Sequential list of basic blocks. BB instructions are auto-populated from our instructions
-    
+
     def __repr__(self):
         return '<Function \'{}\' at {}>'.format(self.name, hex(self.address))
 
@@ -34,9 +34,10 @@ class Function(object):
                 cur = self.instructions[i]
                 next = self.instructions[i + 1]
 
-                if cur.is_jump() and cur.operands[0].type == Operand.IMM:
-                    bb_ends.add(cur.operands[0].imm)
+                if cur.is_jump():
                     bb_ends.add(next.address)
+                    if cur.operands[0].type == Operand.IMM:
+                        bb_ends.add(cur.operands[0].imm)
 
             bb_ends = sorted(list(bb_ends))
             bb_instructions = []
@@ -62,7 +63,7 @@ class Function(object):
                             bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
             bb.instructions = bb_instructions
             self.bbs.append(bb)
-    
+
     def contains_address(self, address):
         return self.address <= address < self.address + self.size
 
@@ -89,14 +90,14 @@ class Function(object):
 class BasicBlock(object):
     def __init__(self, parent_func, address, size):
         self.parent = parent_func
-        self.address = address
-        self.size = size
+        self.address = int(address)
+        self.size = int(size)
         self.offset = self.parent.address - self.address
         self.instructions = []
-    
+
     def __repr__(self):
         return '<Basic block at {}>'.format(hex(self.address))
-    
+
     def print_disassembly(self):
         for i in self.instructions:
             print hex(i.address) + ' ' + str(i)
@@ -223,14 +224,13 @@ class Operand(object):
 
     def __str__(self):
         sizes = {
-                None: '',
                 1: 'byte',
                 2: 'word',
                 4: 'dword',
                 8: 'qword'
                 }
         if self.type == Operand.IMM:
-            return sizes[self.size] + ' ' + hex(self.imm)
+            return sizes.get(self.size, '') + ' ' + hex(self.imm)
         elif self.type == Operand.FP:
             return str(self.fp)
         elif self.type == Operand.REG:
@@ -261,7 +261,7 @@ class Operand(object):
 
             s += ']'
 
-            return sizes[self.size] + ' ' + s
+            return sizes.get(self.size, '') + ' ' + s
 
 
 def operand_from_cs_op(csOp, instruction):

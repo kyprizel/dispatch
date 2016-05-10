@@ -33,8 +33,8 @@ class ELFExecutable(BaseExecutable):
         if dyn:
             self.libraries = [t.needed for t in dyn.iter_tags() if t['d_tag'] == 'DT_NEEDED']
 
-        self.next_injection_offset = 0
-        self.next_injection_vaddr = 0
+        self.next_injection_offset = None
+        self.next_injection_vaddr = None
 
     def _identify_arch(self):
         machine = self.helper.get_machine_arch()
@@ -152,7 +152,7 @@ class ELFExecutable(BaseExecutable):
 
         # TODO: Automatically find and label main from call to libc_start_main
 
-    def _prepare_for_injection(self):
+    def prepare_for_injection(self):
         """
         Derived from http://vxheavens.com/lib/vsc01.html
         """
@@ -230,6 +230,8 @@ class ELFExecutable(BaseExecutable):
             modified.seek(section_header_offset)
             modified.write(self.helper.structs.Elf_Shdr.build(section_header))
 
+        # TODO: Architecture-specific padding
+        # Should be something that won't immediately crash, but can be caught (e.g. SIGTRAP on x86)
         modified = StringIO(modified.getvalue()[:self.next_injection_offset] +
                             '\xCC'*INJECTION_SIZE +
                             modified.getvalue()[self.next_injection_offset:])
@@ -240,6 +242,11 @@ class ELFExecutable(BaseExecutable):
         return True
 
     def inject(self, asm, update_entry=False):
+        if self.next_injection_offset is None or self.next_injection_vaddr is None:
+            logging.warning(
+                'prepare_for_injection() was not called before inject(). This may cause unexpected behavior')
+            self.prepare_for_injection()
+
         for segment in self.helper.iter_segments():
             if segment['p_type'] == 'PT_LOAD' and segment['p_flags'] & P_FLAGS.PF_X:
                 injection_section_idx = max(i for i in range(self.helper.num_sections()) if segment.section_in_segment(self.helper.get_section(i)))
@@ -251,13 +258,17 @@ class ELFExecutable(BaseExecutable):
         # shift stuff around.
         if injection_section['sh_size'] < INJECTION_SIZE or \
                         injection_section['sh_offset'] + injection_section['sh_size'] < self.next_injection_offset + len(asm):
-            self._prepare_for_injection()
+            logging.debug('Automatically expanding injection section to accommodate for assembly')
+
+            # NOTE: Could this change the destination address for the code that gets injected?
+            self.prepare_for_injection()
         elif self.next_injection_offset == 0:
             used_code_len = len(injection_section.data().rstrip('\xCC'))
             self.next_injection_offset = injection_section['sh_offset'] + used_code_len
             self.next_injection_vaddr = injection_section['sh_addr'] + used_code_len
 
         # "Inject" the assembly
+        logging.debug('Injecting {} bytes of assembly at offset {}'.format(len(asm), self.next_injection_offset))
         self.binary.seek(self.next_injection_offset)
         self.binary.write(asm)
 
@@ -287,11 +298,16 @@ class ELFExecutable(BaseExecutable):
                 logging.warning('{} will be overwritten but there are xrefs to it: {}'.format(ins,
                                                                                               self.xrefs[ins.address]))
 
-        self.binary.seek(self.vaddr_binary_offset(vaddr))
+        offset = self.vaddr_binary_offset(vaddr)
+        self.binary.seek(offset)
+        logging.debug('Replacing instruction(s) at offset {}'.format(offset))
         self.binary.write(new_asm)
-        self.binary.write(self.analyzer.NOP_INSTRUCTION * ((vaddr - len(new_asm)) / len(self.analyzer.NOP_INSTRUCTION)))
 
-        new_instructions = self.analyzer.disassemble_range(vaddr, vaddr+new_asm)
+        overwritten_size = sum(i.size for i in overwritten_insns)
+        padding = self.analyzer.NOP_INSTRUCTION * ((overwritten_size - len(new_asm)) / len(self.analyzer.NOP_INSTRUCTION))
+        self.binary.write(padding)
+
+        new_instructions = self.analyzer.disassemble_range(vaddr, vaddr+len(new_asm))
 
         func = self.function_containing_vaddr(vaddr)
 

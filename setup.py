@@ -1,4 +1,4 @@
-from distutils.core import setup
+from setuptools import setup
 
 setup(
     name='dispatch',
@@ -8,9 +8,9 @@ setup(
     description='Programmatic disassembly and patching from NYU\'s OSIRIS lab',
     packages=['dispatch', 'dispatch.util', 'dispatch.formats', 'dispatch.analysis'],
     install_requires=[
-        'pyelftools==0.23',
-        'pefile==1.2.10.post114',
         'capstone>3.0',
+        'pyelftools',
+        'pefile',
         'macholib'
     ]
 )

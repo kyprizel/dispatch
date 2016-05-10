@@ -76,48 +76,6 @@ class BaseAnalyzer(object):
                 vaddr = section.vaddr + found_string.start()
                 self.executable.strings[vaddr] = String(found_string.group(), vaddr, self.executable)
 
-    def _identify_bbs(self):
-        '''
-        Extracts all basic blocks from the executable and stores them in the associated function's bbs list
-        :return: None
-        '''
-        for func in self.executable.iter_functions():
-            if func.instructions:
-                bb_ends = set([func.instructions[-1].address + func.instructions[-1].size])
-
-                for i in range(len(func.instructions) - 1):
-                    cur = func.instructions[i]
-                    next = func.instructions[i+1]
-
-                    if cur.is_jump() and cur.operands[0].type == Operand.IMM:
-                        bb_ends.add(cur.operands[0].imm)
-                        bb_ends.add(next.address)
-
-                bb_ends = sorted(list(bb_ends))
-                bb_instructions = []
-
-                for ins in func.instructions:
-                    if ins.address == bb_ends[0] and bb_instructions:
-                        bb = BasicBlock(func,
-                                        bb_instructions[0].address,
-                                        bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
-                        bb.instructions = bb_instructions
-                        func.bbs.append(bb)
-
-                        bb_ends = bb_ends[1:]
-                        bb_instructions = [ins]
-                    else:
-                        bb_instructions.append(ins)
-
-                # There will always be one BB left over which "ends" at the first address of the next function, so be
-                # sure to add it
-
-                bb = BasicBlock(func,
-                                bb_instructions[0].address,
-                                bb_instructions[-1].address + bb_instructions[-1].size - bb_instructions[0].address)
-                bb.instructions = bb_instructions
-                func.bbs.append(bb)
-
 
     def _mark_xrefs(self):
         '''
