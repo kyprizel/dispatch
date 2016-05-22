@@ -245,22 +245,24 @@ class X86_Analyzer(BaseAnalyzer):
                     # NOTE: This could either be a jump table or a value table
                     if ins.mnemonic == 'lea' and ins.operands[1].type == Operand.MEM:
                         insn_with_mem_op = bb_types[bb.address][1]
-                        table_scale = insn_with_mem_op.operands[1].scale
+                        if len(insn_with_mem_op.operands) > 1 and insn_with_mem_op.operands[1].type == Operand.MEM:
+                            table_scale = insn_with_mem_op.operands[1].scale
 
-                        table_addr = ins.address + ins.size + ins.operands[1].disp
+                            table_addr = ins.address + ins.size + ins.operands[1].disp
 
-                        logging.debug("Marking table at {} as an ADDR_REL table".format(hex(table_addr)))
-                        table_types[table_addr] = (TABLE_TYPE.ADDR_REL, table_scale, ins.address + ins.size)
-                        ins_to_table.append((ins.address, table_addr))
-                        break
+                            logging.debug("Marking table at {} as an ADDR_REL table".format(hex(table_addr)))
+                            table_types[table_addr] = (TABLE_TYPE.ADDR_REL, table_scale, ins.address + ins.size)
+                            ins_to_table.append((ins.address, table_addr))
+                            break
 
                     # Option 2: offset is directly in the mem. operand
-                    mem_offset = bb_types[bb.address][1].operands[-1].disp
-                    if mem_offset:
-                        logging.debug("Marking table at {} as an ABS table".format(hex(mem_offset)))
-                        table_types[mem_offset] = (TABLE_TYPE.ABS, bb_types[bb.address][1].operands[-1].scale)
-                        ins_to_table.append((ins.address, mem_offset))
-                        break
+                    if bb_types[bb.address][1].operands[-1].type == Operand.MEM:
+                        mem_offset = bb_types[bb.address][1].operands[-1].disp
+                        if mem_offset:
+                            logging.debug("Marking table at {} as an ABS table".format(hex(mem_offset)))
+                            table_types[mem_offset] = (TABLE_TYPE.ABS, bb_types[bb.address][1].operands[-1].scale)
+                            ins_to_table.append((ins.address, mem_offset))
+                            break
 
                     logging.debug("Couldn't find anything with a table offset in BB at {}".format(hex(bb.address)))
 
@@ -280,6 +282,8 @@ class X86_Analyzer(BaseAnalyzer):
         table_addrs = sorted(table_types.keys())
 
         for start_a, end_a in zip(table_addrs[:-1], table_addrs[1:]):
+            if not table_types[start_a]:
+                continue
             t_type = table_types[start_a][0]
             scale = table_types[start_a][1]
             for addr in range(start_a, end_a, scale):
