@@ -36,6 +36,8 @@ class X86_Analyzer(BaseAnalyzer):
         for ins in self._disassembler.disasm(self.executable.binary.read(size), start_vaddr):
             if ins.id:
                 instructions.append(instruction_from_cs_insn(ins, self.executable))
+            else:
+                print ins
 
         return instructions
 
@@ -281,8 +283,17 @@ class X86_Analyzer(BaseAnalyzer):
             t_type = table_types[start_a][0]
             scale = table_types[start_a][1]
             for addr in range(start_a, end_a, scale):
-                raw = self.executable.get_binary_vaddr_range(addr, addr+scale)
-                data_val = struct.unpack(self.executable.pack_endianness+('i' if scale == 4 else 'q'), raw)[0]
+                # sometimes, our addr+scale ends up not being in the executable,
+                # usually because they compute a relative offset and then add a
+                # base address to it. For now, we'll just skip the address.
+                # TODO: Is there a way to do this without basically implementing
+                #       symbolic execution?
+                try:
+                    raw = self.executable.get_binary_vaddr_range(addr, addr+scale)
+                    data_val = struct.unpack(self.executable.pack_endianness+('i' if scale == 4 else 'q'), raw)[0]
+                except KeyError:
+                    logging.warning("Invalid vaddrs requested during jump table analysis, skipping this vaddr: {:08x}".format(addr))
+                    continue
                 if t_type == TABLE_TYPE.ADDR_REL:
                     addr_bit_len = 8*self.executable.address_length()
                     abs_val = (start_a+sign_extend(data_val, addr_bit_len)) & (2**(addr_bit_len+1) - 1)
