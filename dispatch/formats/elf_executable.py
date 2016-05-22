@@ -289,7 +289,7 @@ class ELFExecutable(BaseExecutable):
         return self.next_injection_vaddr - len(asm)
 
     def replace_instruction(self, vaddr, new_asm):
-        if not self.analyzer.ins_map[vaddr]:
+        if not vaddr in self.analyzer.ins_map:
             raise Exception('Starting virtual address to replace must be an existing instruction')
 
         overwritten_insns = self.analyzer.ins_map[vaddr:vaddr+len(new_asm)]
