@@ -12,5 +12,6 @@ Programmatic binary disassembly and patching
 ```python
 import dispatch
 ex = dispatch.read_executable('/bin/cat')
+ex.analyze()
 print ex.functions
 ```
