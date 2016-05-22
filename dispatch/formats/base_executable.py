@@ -144,11 +144,17 @@ class BaseExecutable(object):
         Gets the raw bytes from the binary within a virtual address range
         :param start: Starting virtual address
         :param end: Ending virtual address
+        :raises: KeyError if either the start or end virtual addresses do not actually exist in the binary
         :return: The bytes in the binary between the two virtual addresses
         '''
         start_offset = self.vaddr_binary_offset(start)
         end_offset = self.vaddr_binary_offset(end)
-        return self.get_binary()[start_offset:end_offset]
+        # if either of these returns None we don't want to slice up -- raise an error
+        if start_offset and end_offset:
+            return self.get_binary()[start_offset:end_offset]
+
+        bad_addr = start if not start_offset else end # which address triggered our error
+        raise KeyError("Vaddr is not in binary: {:x}".format(bad_addr))
     
     def analyze(self):
         '''
