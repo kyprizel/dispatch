@@ -1,5 +1,5 @@
 *.pyc
-a.out
 .idea/
-build
-tests/patched
+build/
+dist/
+dispatch.egg-info/

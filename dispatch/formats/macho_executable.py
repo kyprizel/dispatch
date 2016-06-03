@@ -219,15 +219,3 @@ class MachOExecutable(BaseExecutable):
         self.binary.write(asm)
 
         return injection_vaddr
-
-    def replace_instruction(self, old_ins, new_asm):
-        if len(new_asm) > old_ins.size:
-            # TODO: make this automatically call inject so that any instruction can be replaced
-            raise ValueError('Length of new assembly must be <= size of old instruction')
-
-        self.binary.seek(self.vaddr_binary_offset(old_ins.address))
-        self.binary.write(new_asm)
-
-        # TODO: Update function instruction lists
-        # TODO: Add function in analyzer to return a NOP so this can be used on all archs
-        self.binary.write('\x90' * (old_ins.size - len(new_asm)))

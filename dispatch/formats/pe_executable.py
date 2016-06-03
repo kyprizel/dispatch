@@ -103,9 +103,43 @@ class PEExecutable(BaseExecutable):
 
         return inject_rva + self.helper.OPTIONAL_HEADER.ImageBase
 
-    def replace_instruction(self, old_ins, new_asm):
-        if len(new_asm) > old_ins.size:
-            raise ValueError('Length of new assembly must be <= size of old instruction')
+    def replace_instruction(self, vaddr, new_asm):
+        # Identical to the implementation in base_executable except for the commented section
 
-        self.helper.set_bytes_at_rva(old_ins.address - self.helper.OPTIONAL_HEADER.ImageBase,
-                                     str(new_asm) + '\x90' * (old_ins.size - len(new_asm)))
+        if not vaddr in self.analyzer.ins_map:
+            raise Exception('Starting virtual address to replace must be an existing instruction')
+
+        overwritten_insns = self.analyzer.ins_map[vaddr:vaddr + max(len(new_asm), 1)]
+        for ins in overwritten_insns:
+            if ins.address in self.xrefs:
+                logging.warning('{} will be overwritten but there are xrefs to it: {}'.format(ins,
+                                                                                              self.xrefs[ins.address]))
+
+        logging.debug('Replacing instruction(s) at vaddr {}'.format(vaddr))
+
+        # Since we're using pefile to keep track of the (changed) binary, use pefile's methods to write the new asm
+        self.helper.set_bytes_at_rva(vaddr - self.helper.OPTIONAL_HEADER.ImageBase, new_asm)
+
+        overwritten_size = sum(i.size for i in overwritten_insns)
+        padding = self.analyzer.NOP_INSTRUCTION * ((overwritten_size - len(new_asm)) / len(self.analyzer.NOP_INSTRUCTION))
+        self.helper.set_bytes_at_rva(vaddr - self.helper.OPTIONAL_HEADER.ImageBase + len(new_asm), padding)
+
+        new_instructions = self.analyzer.disassemble_range(vaddr, vaddr + len(new_asm))
+
+        func = self.function_containing_vaddr(vaddr)
+
+        insert_point = func.instructions.index(overwritten_insns[0])
+
+        for ins in overwritten_insns:
+            func.instructions.remove(ins)
+
+        func.instructions = func.instructions[:insert_point] + new_instructions + func.instructions[insert_point:]
+
+        func.do_bb_analysis()
+
+        for ins in overwritten_insns:
+            del self.analyzer.ins_map[ins.address]
+
+        for ins in new_instructions:
+            self.analyzer.ins_map[ins.address] = ins
+

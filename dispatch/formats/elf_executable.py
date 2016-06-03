@@ -288,45 +288,4 @@ class ELFExecutable(BaseExecutable):
 
         return self.next_injection_vaddr - len(asm)
 
-    def replace_instruction(self, vaddr, new_asm):
-        if not vaddr in self.analyzer.ins_map:
-            raise Exception('Starting virtual address to replace must be an existing instruction')
-
-        overwritten_insns = self.analyzer.ins_map[vaddr:vaddr+len(new_asm)]
-        for ins in overwritten_insns:
-            if ins.address in self.xrefs:
-                logging.warning('{} will be overwritten but there are xrefs to it: {}'.format(ins,
-                                                                                              self.xrefs[ins.address]))
-
-        offset = self.vaddr_binary_offset(vaddr)
-        self.binary.seek(offset)
-        logging.debug('Replacing instruction(s) at offset {}'.format(offset))
-        self.binary.write(new_asm)
-
-        overwritten_size = sum(i.size for i in overwritten_insns)
-        padding = self.analyzer.NOP_INSTRUCTION * ((overwritten_size - len(new_asm)) / len(self.analyzer.NOP_INSTRUCTION))
-        self.binary.write(padding)
-
-        new_instructions = self.analyzer.disassemble_range(vaddr, vaddr+len(new_asm))
-
-        func = self.function_containing_vaddr(vaddr)
-
-        insert_point = func.instructions.index(overwritten_insns[0])
-
-        # Remove the old instructions from the function
-        for ins in overwritten_insns:
-            func.instructions.remove(ins)
-
-        # Insert the new instructions where we just removed the old ones
-        func.instructions = func.instructions[:insert_point] + new_instructions + func.instructions[insert_point:]
-
-        # Re-analyze the function for BBs
-        func.do_bb_analysis()
-
-        # Finally clear the instructions out from the global instruction map
-        for ins in overwritten_insns:
-            del self.analyzer.ins_map[ins.address]
-
-        for ins in new_instructions:
-            self.analyzer.ins_map[ins.address] = ins
 
