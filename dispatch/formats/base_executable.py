@@ -252,18 +252,18 @@ class BaseExecutable(object):
         new_instructions = self.analyzer.disassemble_range(vaddr, vaddr + len(new_asm))
 
         func = self.function_containing_vaddr(vaddr)
+        if func:
+            insert_point = func.instructions.index(overwritten_insns[0])
 
-        insert_point = func.instructions.index(overwritten_insns[0])
+            # Remove the old instructions from the function
+            for ins in overwritten_insns:
+                func.instructions.remove(ins)
 
-        # Remove the old instructions from the function
-        for ins in overwritten_insns:
-            func.instructions.remove(ins)
+            # Insert the new instructions where we just removed the old ones
+            func.instructions = func.instructions[:insert_point] + new_instructions + func.instructions[insert_point:]
 
-        # Insert the new instructions where we just removed the old ones
-        func.instructions = func.instructions[:insert_point] + new_instructions + func.instructions[insert_point:]
-
-        # Re-analyze the function for BBs
-        func.do_bb_analysis()
+            # Re-analyze the function for BBs
+            func.do_bb_analysis()
 
         # Finally clear the instructions out from the global instruction map
         for ins in overwritten_insns:
